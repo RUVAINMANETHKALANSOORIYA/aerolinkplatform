@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+requests
+pika
+tenacity
+pytest
+passlib==1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]
+python-multipart

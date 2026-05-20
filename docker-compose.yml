@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+
+  # ── MESSAGE BROKER ──────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"       # AMQP
+      - "15672:15672"     # Management UI (http://localhost:15672, guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API GATEWAY (PUBLIC ENTRY POINT) ────────────────────────────────────────
+  api_gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    ports:
+      - "8080:8000"       # Public Swagger UI: http://localhost:8080/docs
+    environment:
+      AUTH_SERVICE_URL: http://auth_service:8000
+      FLIGHT_SERVICE_URL: http://flight_service:8000
+      BOOKING_SERVICE_URL: http://booking_service:8000
+      BAGGAGE_SERVICE_URL: http://baggage_service:8000
+      SCHEDULE_SERVICE_URL: http://schedule_service:8000
+    depends_on:
+      - auth_service
+      - flight_service
+      - booking_service
+      - baggage_service
+      - schedule_service
+    restart: on-failure
+
+  # ── AUTH SERVICE (JWT) ──────────────────────────────────────────────────────
+  auth_service:
+    build:
+      context: .
+      dockerfile: services/auth_service/Dockerfile
+    expose:
+      - "8000"            # Internal only; access through API Gateway
+    depends_on:
+      - rabbitmq
+
+  # ── FLIGHT SERVICE ─────────────────────────────────────────────────────────
+  flight_service:
+    build:
+      context: .
+      dockerfile: services/flight_service/Dockerfile
+    expose:
+      - "8000"            # Internal only; access through API Gateway
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ── BOOKING SERVICE ────────────────────────────────────────────────────────
+  booking_service:
+    build:
+      context: .
+      dockerfile: services/booking_service/Dockerfile
+    expose:
+      - "8000"            # Internal only; access through API Gateway
+    depends_on:
+      - flight_service
+      - auth_service
+
+  # ── BAGGAGE SERVICE ────────────────────────────────────────────────────────
+  baggage_service:
+    build:
+      context: .
+      dockerfile: services/baggage_service/Dockerfile
+    expose:
+      - "8000"            # Internal only; access through API Gateway
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ── SCHEDULE SERVICE ───────────────────────────────────────────────────────
+  schedule_service:
+    build:
+      context: .
+      dockerfile: services/schedule_service/Dockerfile
+    expose:
+      - "8000"            # Internal only; access through API Gateway
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ── EVENT CONSUMER ─────────────────────────────────────────────────────────
+  event_consumer:
+    build:
+      context: .
+      dockerfile: services/event_consumer/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure

@@ -1,0 +1,232 @@
+{
+  "info": {
+    "_postman_id": "7f0c2f1a-4e4b-4a39-8c7c-a0a3f2a6f0b1",
+    "name": "AeroLink API Tests",
+    "description": "Phase 3 test collection for AeroLink FastAPI microservices.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Auth Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/health"
+          }
+        },
+        {
+          "name": "Flight Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/flights/health"
+          }
+        },
+        {
+          "name": "Booking Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/bookings/health"
+          }
+        },
+        {
+          "name": "Baggage Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/baggage/health"
+          }
+        },
+        {
+          "name": "Schedule Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/schedules/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/auth/register?username={{staffUsername}}&password={{password}}&role=staff"
+          }
+        },
+        {
+          "name": "Login Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "{{staffUsername}}" },
+                { "key": "password", "value": "{{password}}" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Register Passenger",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/auth/register?username={{passengerUsername}}&password={{password}}&role=passenger"
+          }
+        },
+        {
+          "name": "Login Passenger",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "{{passengerUsername}}" },
+                { "key": "password", "value": "{{password}}" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Flights and Bookings",
+      "item": [
+        {
+          "name": "Create Flight",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/flights?flight_no={{flightNo}}&seats=50"
+          }
+        },
+        {
+          "name": "Passenger Blocked From Create Flight",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{passengerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/flights?flight_no={{blockedFlightNo}}&seats=10"
+          }
+        },
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{passengerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/bookings?name={{passengerUsername}}&flight_id={{flightId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Baggage",
+      "item": [
+        {
+          "name": "Create Baggage",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/baggage?passenger_name={{passengerUsername}}&flight_id={{flightId}}&tag_number={{tagNumber}}"
+          }
+        },
+        {
+          "name": "Update Baggage",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/baggage/{{baggageId}}/status?new_status=LOADED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Schedules",
+      "item": [
+        {
+          "name": "Create Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flight_no\": \"{{scheduleFlightNo}}\",\n  \"origin\": \"LHR\",\n  \"destination\": \"JFK\",\n  \"departure_time\": \"2025-06-15T14:30:00\",\n  \"arrival_time\": \"2025-06-15T22:30:00\",\n  \"gate\": \"A12\"\n}"
+            },
+            "url": "{{baseUrl}}/api/schedules"
+          }
+        },
+        {
+          "name": "Update Schedule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BOARDING\",\n  \"gate\": \"A15\"\n}"
+            },
+            "url": "{{baseUrl}}/api/schedules/{{scheduleId}}"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "password", "value": "secret123" },
+    { "key": "staffUsername", "value": "staff_test_user" },
+    { "key": "passengerUsername", "value": "passenger_test_user" },
+    { "key": "staffToken", "value": "" },
+    { "key": "passengerToken", "value": "" },
+    { "key": "flightNo", "value": "AL-101" },
+    { "key": "blockedFlightNo", "value": "AL-999" },
+    { "key": "flightId", "value": "1" },
+    { "key": "tagNumber", "value": "TAG-1001" },
+    { "key": "baggageId", "value": "1" },
+    { "key": "scheduleFlightNo", "value": "AL-202" },
+    { "key": "scheduleId", "value": "1" }
+  ]
+}
