@@ -1,0 +1,17 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - cd aerolink-frontend
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: aerolink-frontend/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - aerolink-frontend/node_modules/**/*
