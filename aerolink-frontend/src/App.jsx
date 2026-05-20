@@ -1,7 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 
-const API_BASE_URL = "https://keozoo3dx4.execute-api.us-east-1.amazonaws.com";
+const API_BASE_URL = "https://koezoo3dx4.execute-api.us-east-1.amazonaws.com";
 
 function App() {
   const [health, setHealth] = useState(null);
@@ -94,16 +94,23 @@ function App() {
     }
   };
 
-  const getBookings = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/bookings`);
-      const data = await res.json();
-      setBookings(data.items || []);
-      setMessage("Bookings loaded successfully");
-    } catch (error) {
-      setMessage("Failed to load bookings");
+const getBookings = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/bookings`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      setMessage(data.error || "Failed to load bookings");
+      return;
     }
-  };
+
+    setBookings(data.items || data.bookings || []);
+    setMessage("Bookings loaded successfully");
+  } catch (error) {
+    console.error(error);
+    setMessage("Failed to load bookings");
+  }
+};
 
   return (
     <div className="page">
