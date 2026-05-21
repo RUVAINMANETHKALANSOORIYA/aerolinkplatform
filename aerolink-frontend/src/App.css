@@ -41,7 +41,7 @@ body {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 22px;
 }
 
@@ -83,6 +83,11 @@ input {
   border: 1px solid #d1d5db;
   border-radius: 10px;
   margin-bottom: 15px;
+}
+
+input:focus {
+  outline: 2px solid rgba(30, 64, 175, 0.2);
+  border-color: #1e40af;
 }
 
 pre {

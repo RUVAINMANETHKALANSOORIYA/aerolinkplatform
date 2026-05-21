@@ -1,44 +1,59 @@
 import { useState } from "react";
 import "./App.css";
+import { API_BASE_URL } from "./config.js";
 
-const API_BASE_URL = "https://koezoo3dx4.execute-api.us-east-1.amazonaws.com";
+async function requestJson(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.message || "Request failed");
+  }
+
+  return data;
+}
 
 function App() {
   const [health, setHealth] = useState(null);
   const [flights, setFlights] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [baggage, setBaggage] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [flightId, setFlightId] = useState("");
+  const [baggageId, setBaggageId] = useState("");
+  const [baggageStatus, setBaggageStatus] = useState("loaded");
   const [message, setMessage] = useState("");
 
   const checkHealth = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/health`);
-      const data = await res.json();
-      setHealth(data);
-      setMessage("Health check successful");
+      const data = await requestJson("/health");
+      setHealth(data.item || data);
+      setMessage(data.message || "Health check successful");
     } catch (error) {
-      setMessage("Health check failed");
+      setMessage(error.message || "Health check failed");
     }
   };
 
   const getFlights = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/flights`);
-      const data = await res.json();
+      const data = await requestJson("/flights");
       setFlights(data.items || []);
-      setMessage("Flights loaded successfully");
+      setMessage(data.message || "Flights loaded successfully");
     } catch (error) {
-      setMessage("Failed to load flights");
+      setMessage(error.message || "Failed to load flights");
     }
   };
 
   const createFlight = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/flights`, {
+      const data = await requestJson("/flights", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
         body: JSON.stringify({
           flight_no: "AL-FRONTEND-101",
           origin: "CMB",
@@ -48,18 +63,17 @@ function App() {
         })
       });
 
-      const data = await res.json();
-      const newFlightId = data.flight?.flight_id;
+      const newFlightId = data.item?.flight_id;
 
       if (newFlightId) {
         setFlightId(newFlightId);
-        setMessage(`Flight created successfully. Flight ID: ${newFlightId}`);
+        setMessage(data.message || `Flight created successfully. Flight ID: ${newFlightId}`);
         getFlights();
       } else {
-        setMessage("Flight created, but flight ID was not returned");
+        setMessage(data.message || "Flight created, but flight ID was not returned");
       }
     } catch (error) {
-      setMessage("Failed to create flight");
+      setMessage(error.message || "Failed to create flight");
     }
   };
 
@@ -70,47 +84,70 @@ function App() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/bookings`, {
+      const data = await requestJson("/bookings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
         body: JSON.stringify({
           flight_id: flightId,
-          passenger_name: "Demo Passenger"
+          passenger_name: "Demo Passenger",
+          seat_count: 1
         })
       });
 
-      const data = await res.json();
-
-      if (res.ok) {
-        setMessage("Booking created successfully");
-        getBookings();
-      } else {
-        setMessage(data.error || "Booking failed");
-      }
+      setMessage(data.message || "Booking created successfully");
+      getBookings();
     } catch (error) {
-      setMessage("Failed to create booking");
+      setMessage(error.message || "Failed to create booking");
     }
   };
 
-const getBookings = async () => {
-  try {
-    const res = await fetch(`${API_BASE_URL}/bookings`);
-    const data = await res.json();
+  const getBookings = async () => {
+    try {
+      const data = await requestJson("/bookings");
+      setBookings(data.items || []);
+      setMessage(data.message || "Bookings loaded successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to load bookings");
+    }
+  };
 
-    if (!res.ok) {
-      setMessage(data.error || "Failed to load bookings");
+  const getBaggage = async () => {
+    try {
+      const data = await requestJson("/baggage");
+      setBaggage(data.items || []);
+      setMessage(data.message || "Baggage loaded successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to load baggage");
+    }
+  };
+
+  const updateBaggageStatus = async () => {
+    if (!baggageId) {
+      setMessage("Please enter a baggage ID first");
       return;
     }
 
-    setBookings(data.items || data.bookings || []);
-    setMessage("Bookings loaded successfully");
-  } catch (error) {
-    console.error(error);
-    setMessage("Failed to load bookings");
-  }
-};
+    try {
+      const data = await requestJson(`/baggage/${baggageId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: baggageStatus })
+      });
+
+      setMessage(data.message || "Baggage status updated successfully");
+      getBaggage();
+    } catch (error) {
+      setMessage(error.message || "Failed to update baggage status");
+    }
+  };
+
+  const getNotifications = async () => {
+    try {
+      const data = await requestJson("/notifications");
+      setNotifications(data.items || []);
+      setMessage(data.message || "Notifications loaded successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to load notifications");
+    }
+  };
 
   return (
     <div className="page">
@@ -118,7 +155,7 @@ const getBookings = async () => {
         <p className="tag">AeroLink Airline Systems Platform</p>
         <h1>Cloud-Based Airline Dashboard</h1>
         <p>
-          React frontend connected to AWS API Gateway, Lambda, and DynamoDB.
+          React frontend connected to AWS API Gateway, Lambda, DynamoDB, and CORS-enabled serverless routes.
         </p>
       </header>
 
@@ -150,6 +187,7 @@ const getBookings = async () => {
                 <strong>{flight.flight_no}</strong>
                 <span>{flight.origin} → {flight.destination}</span>
                 <small>ID: {flight.flight_id}</small>
+                <small>Available seats: {flight.available_seats}</small>
               </div>
             ))}
           </div>
@@ -168,6 +206,55 @@ const getBookings = async () => {
                 <strong>{booking.passenger_name}</strong>
                 <span>Status: {booking.status}</span>
                 <small>Flight ID: {booking.flight_id}</small>
+                <small>Booking ID: {booking.booking_id}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h2>Baggage</h2>
+          <div className="actions">
+            <button onClick={getBaggage}>View Baggage</button>
+          </div>
+
+          <input
+            value={baggageId}
+            onChange={(e) => setBaggageId(e.target.value)}
+            placeholder="Baggage ID"
+          />
+          <input
+            value={baggageStatus}
+            onChange={(e) => setBaggageStatus(e.target.value)}
+            placeholder="Status"
+          />
+          <div className="actions">
+            <button onClick={updateBaggageStatus}>Update Status</button>
+          </div>
+
+          <div className="list">
+            {baggage.map((bag) => (
+              <div className="item" key={bag.baggage_id}>
+                <strong>{bag.tag_number || bag.baggage_id}</strong>
+                <span>Status: {bag.status}</span>
+                <small>ID: {bag.baggage_id}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h2>Notifications</h2>
+          <div className="actions">
+            <button onClick={getNotifications}>View Notifications</button>
+          </div>
+
+          <div className="list">
+            {notifications.map((notification) => (
+              <div className="item" key={notification.notification_id}>
+                <strong>{notification.message}</strong>
+                <span>Read: {notification.read ? "Yes" : "No"}</span>
+                <small>ID: {notification.notification_id}</small>
               </div>
             ))}
           </div>
