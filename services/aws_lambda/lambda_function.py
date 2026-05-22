@@ -9,6 +9,10 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
+import hashlib
+import hmac
+import time
+import base64
 
 
 DYNAMODB = boto3.resource("dynamodb")
@@ -28,6 +32,89 @@ CORS_HEADERS = {
     "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
     "Content-Type": "application/json",
 }
+
+# Token secret for HMAC signing (simple JWT-like token for prototype)
+TOKEN_SECRET = os.getenv("TOKEN_SECRET", "dev-secret")
+
+
+def b64u_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def b64u_decode(data: str) -> bytes:
+    padding = 4 - (len(data) % 4)
+    if padding and padding < 4:
+        data += "=" * padding
+    return base64.urlsafe_b64decode(data.encode("ascii"))
+
+
+def make_token(payload: dict[str, Any]) -> str:
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload_copy = dict(payload)
+    payload_copy.setdefault("iat", int(time.time()))
+    header_b = b64u_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b = b64u_encode(json.dumps(payload_copy, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b}.{payload_b}".encode("utf-8")
+    signature = hmac.new(TOKEN_SECRET.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    sig_b = b64u_encode(signature)
+    return f"{header_b}.{payload_b}.{sig_b}"
+
+
+def verify_token(token: str) -> dict[str, Any]:
+    try:
+        header_b, payload_b, sig_b = token.split(".")
+    except ValueError:
+        raise ValueError("Invalid token format")
+    signing_input = f"{header_b}.{payload_b}".encode("utf-8")
+    expected_sig = hmac.new(TOKEN_SECRET.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    try:
+        sig = b64u_decode(sig_b)
+    except Exception:
+        raise ValueError("Invalid token signature encoding")
+    if not hmac.compare_digest(expected_sig, sig):
+        raise ValueError("Invalid token signature")
+    payload_json = b64u_decode(payload_b).decode("utf-8")
+    return json.loads(payload_json)
+
+
+def hash_password(password: str) -> str:
+    salt = uuid.uuid4().hex
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return salt + "$" + base64.b64encode(dk).decode("ascii")
+
+
+def verify_password(stored: str, password: str) -> bool:
+    try:
+        salt, b64hash = stored.split("$", 1)
+    except Exception:
+        return False
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return hmac.compare_digest(base64.b64encode(dk).decode("ascii"), b64hash)
+
+
+def find_user_by_username(username: str) -> dict[str, Any] | None:
+    for item in scan_items(USERS_TABLE):
+        if item.get("username") == username:
+            return item
+    return None
+
+
+def authorize(event: dict[str, Any], allowed_roles: set[str] | None = None):
+    headers = (event.get("headers") or {})
+    auth_header = headers.get("Authorization") or headers.get("authorization")
+    if not auth_header:
+        return None, response(401, {"message": "Authorization header missing", "item": {"error": "missing_token"}})
+    if not auth_header.lower().startswith("bearer "):
+        return None, response(401, {"message": "Authorization header must be Bearer token", "item": {"error": "invalid_auth_format"}})
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = verify_token(token)
+    except Exception as exc:
+        return None, response(401, {"message": "Invalid token", "item": {"error": str(exc)}})
+    role = payload.get("role")
+    if allowed_roles and role not in allowed_roles:
+        return None, response(403, {"message": "Role not allowed", "item": {"required": list(allowed_roles), "role": role}})
+    return payload, None
 
 
 def utc_now() -> str:
@@ -423,15 +510,54 @@ def route_request(event: dict[str, Any]) -> dict[str, Any]:
 
     body = parse_body(event)
 
+    # Authentication endpoints
+    if path == "/auth/register" and method == "POST":
+        username = body.get("username")
+        password = body.get("password")
+        full_name = body.get("full_name")
+        if not username or not password or not full_name:
+            return response(400, {"message": "username, password and full_name are required", "item": {"error": "missing_fields"}})
+        if find_user_by_username(username):
+            return response(409, {"message": "username already exists", "item": {"error": "username_exists"}})
+        password_hash = hash_password(password)
+        user = create_item(USERS_TABLE, "user_id", body, extra_fields={"username": username, "full_name": full_name, "role": "passenger", "password_hash": password_hash})
+        token = make_token({"username": username, "role": "passenger"})
+        return response(201, {"message": "User registered successfully", "username": username, "role": "passenger", "token": token})
+
+    if path == "/auth/login" and method == "POST":
+        username = body.get("username")
+        password = body.get("password")
+        if not username or not password:
+            return response(400, {"message": "username and password are required", "item": {"error": "missing_fields"}})
+        user = find_user_by_username(username)
+        if not user:
+            return response(401, {"message": "Invalid credentials", "item": {"error": "invalid_credentials"}})
+        stored = user.get("password_hash")
+        if not stored or not verify_password(stored, password):
+            return response(401, {"message": "Invalid credentials", "item": {"error": "invalid_credentials"}})
+        token = make_token({"username": username, "role": user.get("role", "passenger")})
+        return response(200, {"token": token, "role": user.get("role", "passenger"), "username": username})
+
+    # Legacy user listing endpoints (protected)
     if path == "/users" and method == "POST":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         user = create_item(USERS_TABLE, "user_id", body)
         return response(201, {"message": "User created successfully", "item": user})
     if path == "/users" and method == "GET":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         return response(200, {"items": scan_items(USERS_TABLE)})
 
     if path == "/flights" and method == "POST":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         return create_flight(body)
     if path == "/flights" and method == "GET":
+        # public
         return response(200, {"items": scan_items(FLIGHTS_TABLE)})
 
     match = re.fullmatch(r"/flights/([^/]+)/price", path)
@@ -443,24 +569,54 @@ def route_request(event: dict[str, Any]) -> dict[str, Any]:
         return patch_flight_seats(match.group(1), body)
 
     if path == "/bookings" and method == "POST":
+        auth_user, err = authorize(event, {"passenger"})
+        if err:
+            return err
+        # enforce passenger identity from token
+        body["passenger_name"] = auth_user.get("username")
         return create_booking(body)
     if path == "/bookings" and method == "GET":
-        return response(200, {"items": scan_items(BOOKINGS_TABLE)})
+        auth_user, err = authorize(event, {"passenger", "staff"})
+        if err:
+            return err
+        items = scan_items(BOOKINGS_TABLE)
+        if auth_user.get("role") == "passenger":
+            items = [b for b in items if b.get("passenger_name") == auth_user.get("username")]
+        return response(200, {"items": items})
 
     if path == "/baggage" and method == "POST":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         baggage = create_item(BAGGAGE_TABLE, "baggage_id", body)
         return response(201, {"message": "Baggage created successfully", "item": baggage})
     if path == "/baggage" and method == "GET":
-        return response(200, {"items": scan_items(BAGGAGE_TABLE)})
+        auth_user, err = authorize(event, {"passenger", "staff"})
+        if err:
+            return err
+        items = scan_items(BAGGAGE_TABLE)
+        if auth_user.get("role") == "passenger":
+            # try to filter by passenger name field if present
+            items = [b for b in items if b.get("passenger_name") == auth_user.get("username") or b.get("owner") == auth_user.get("username")]
+        return response(200, {"items": items})
 
     match = re.fullmatch(r"/baggage/([^/]+)/status", path)
     if match and method == "PATCH":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         return update_baggage_status(match.group(1), body)
 
     if path == "/schedules" and method == "POST":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         schedule = create_item(SCHEDULES_TABLE, "schedule_id", body)
         return response(201, {"message": "Schedule created successfully", "item": schedule})
     if path == "/schedules" and method == "GET":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         return response(200, {"items": scan_items(SCHEDULES_TABLE)})
 
     match = re.fullmatch(r"/schedules/([^/]+)", path)
@@ -468,16 +624,26 @@ def route_request(event: dict[str, Any]) -> dict[str, Any]:
         return update_schedule(match.group(1), body)
 
     if path == "/notifications" and method == "POST":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         message = body.get("message")
         if not message:
             return response(400, {"message": "message is required", "item": {"error": "message is required"}})
         notification = create_notification(message, body.get("notification_type", "manual"), body.get("related_id"))
         return response(201, {"message": "Notification created successfully", "item": notification})
     if path == "/notifications" and method == "GET":
-        return response(200, {"items": scan_items(NOTIFICATIONS_TABLE)})
+        auth_user, err = authorize(event, {"passenger", "staff"})
+        if err:
+            return err
+        items = scan_items(NOTIFICATIONS_TABLE)
+        return response(200, {"items": items})
 
     match = re.fullmatch(r"/notifications/([^/]+)/read", path)
     if match and method == "PATCH":
+        auth_user, err = authorize(event, {"staff"})
+        if err:
+            return err
         return mark_notification_read(match.group(1))
 
     return response(404, {"message": "Route not found", "item": {"method": method, "path": path}})

@@ -8,6 +8,21 @@ async function requestJson(path, options = {}) {
     ...(options.headers || {}),
   };
 
+  // Attach Authorization header when token is present
+  try {
+    const token = localStorage.getItem("token");
+    if (token && !headers.Authorization && !headers.authorization) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  } catch (e) {
+    // ignore localStorage errors
+  }
+
+  // Add Content-Type for requests with a body (avoid for GET)
+  if (options.body && !(headers["Content-Type"] || headers["content-type"])) {
+    headers["Content-Type"] = "application/json";
+  }
+
   try {
     const response = await fetch(url, {
       headers,
@@ -41,6 +56,11 @@ async function requestJson(path, options = {}) {
 
 function App() {
   const [health, setHealth] = useState(null);
+  const [auth, setAuth] = useState(() => ({
+    token: localStorage.getItem("token") || null,
+    username: localStorage.getItem("username") || null,
+    role: localStorage.getItem("role") || null,
+  }));
   const [flights, setFlights] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [baggage, setBaggage] = useState([]);
@@ -50,6 +70,13 @@ function App() {
   const [baggageId, setBaggageId] = useState("");
   const [baggageStatus, setBaggageStatus] = useState("loaded");
   const [message, setMessage] = useState("");
+  const [regUsername, setRegUsername] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regFullName, setRegFullName] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [staffUsername, setStaffUsername] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
 
   const checkHealth = async () => {
     try {
@@ -60,6 +87,51 @@ function App() {
       console.error("Health check failed", error);
       setMessage(error.message || "Health check failed");
     }
+  };
+
+  const registerPassenger = async () => {
+    try {
+      const data = await requestJson("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ username: regUsername, password: regPassword, full_name: regFullName }),
+      });
+      // store token
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("username", data.username);
+      localStorage.setItem("role", data.role);
+      setAuth({ token: data.token, username: data.username, role: data.role });
+      setMessage(data.message || "Registered and logged in");
+    } catch (error) {
+      console.error("Register failed", error);
+      setMessage(error.message || "Registration failed");
+    }
+  };
+
+  const login = async (isStaff = false) => {
+    try {
+      const user = isStaff ? staffUsername : loginUsername;
+      const pass = isStaff ? staffPassword : loginPassword;
+      const data = await requestJson("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: user, password: pass }),
+      });
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("username", data.username);
+      localStorage.setItem("role", data.role);
+      setAuth({ token: data.token, username: data.username, role: data.role });
+      setMessage("Logged in");
+    } catch (error) {
+      console.error("Login failed", error);
+      setMessage(error.message || "Login failed");
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("role");
+    setAuth({ token: null, username: null, role: null });
+    setMessage("Logged out");
   };
 
   const getFlights = async () => {
@@ -194,6 +266,40 @@ function App() {
           <button onClick={checkHealth}>Check Health</button>
           {health && (
             <pre>{JSON.stringify(health, null, 2)}</pre>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Authentication</h2>
+          {!auth.token ? (
+            <div>
+              <div>
+                <h4>Passenger Register</h4>
+                <input placeholder="username" value={regUsername} onChange={(e) => setRegUsername(e.target.value)} />
+                <input placeholder="password" type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
+                <input placeholder="full name" value={regFullName} onChange={(e) => setRegFullName(e.target.value)} />
+                <button onClick={registerPassenger}>Register</button>
+              </div>
+
+              <div>
+                <h4>Passenger Login</h4>
+                <input placeholder="username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} />
+                <input placeholder="password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                <button onClick={() => login(false)}>Login</button>
+              </div>
+
+              <div>
+                <h4>Staff Login</h4>
+                <input placeholder="username" value={staffUsername} onChange={(e) => setStaffUsername(e.target.value)} />
+                <input placeholder="password" type="password" value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} />
+                <button onClick={() => login(true)}>Staff Login</button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div>Signed in as: <strong>{auth.username}</strong> ({auth.role})</div>
+              <button onClick={logout}>Logout</button>
+            </div>
           )}
         </div>
 
