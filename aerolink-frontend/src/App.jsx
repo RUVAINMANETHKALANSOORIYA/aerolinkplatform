@@ -3,20 +3,40 @@ import "./App.css";
 import { API_BASE_URL } from "./config.js";
 
 async function requestJson(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const url = `${API_BASE_URL}${path}`;
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.message || "Request failed");
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+
+    const rawBody = await response.text();
+    const data = rawBody ? JSON.parse(rawBody) : {};
+
+    if (!response.ok) {
+      console.error("API request failed", {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        response: data,
+      });
+      throw new Error(data?.message || `Request failed with status ${response.status}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Fetch error", {
+      url,
+      path,
+      options,
+      error,
+    });
+    throw error;
   }
-
-  return data;
 }
 
 function App() {
@@ -36,6 +56,7 @@ function App() {
       setHealth(data.item || data);
       setMessage(data.message || "Health check successful");
     } catch (error) {
+      console.error("Health check failed", error);
       setMessage(error.message || "Health check failed");
     }
   };
@@ -46,6 +67,7 @@ function App() {
       setFlights(data.items || []);
       setMessage(data.message || "Flights loaded successfully");
     } catch (error) {
+      console.error("Load flights failed", error);
       setMessage(error.message || "Failed to load flights");
     }
   };
@@ -73,6 +95,7 @@ function App() {
         setMessage(data.message || "Flight created, but flight ID was not returned");
       }
     } catch (error) {
+      console.error("Create flight failed", error);
       setMessage(error.message || "Failed to create flight");
     }
   };
@@ -96,6 +119,7 @@ function App() {
       setMessage(data.message || "Booking created successfully");
       getBookings();
     } catch (error) {
+      console.error("Create booking failed", error);
       setMessage(error.message || "Failed to create booking");
     }
   };
@@ -106,6 +130,7 @@ function App() {
       setBookings(data.items || []);
       setMessage(data.message || "Bookings loaded successfully");
     } catch (error) {
+      console.error("Load bookings failed", error);
       setMessage(error.message || "Failed to load bookings");
     }
   };
@@ -116,6 +141,7 @@ function App() {
       setBaggage(data.items || []);
       setMessage(data.message || "Baggage loaded successfully");
     } catch (error) {
+      console.error("Load baggage failed", error);
       setMessage(error.message || "Failed to load baggage");
     }
   };
@@ -135,6 +161,7 @@ function App() {
       setMessage(data.message || "Baggage status updated successfully");
       getBaggage();
     } catch (error) {
+      console.error("Update baggage status failed", error);
       setMessage(error.message || "Failed to update baggage status");
     }
   };
@@ -145,6 +172,7 @@ function App() {
       setNotifications(data.items || []);
       setMessage(data.message || "Notifications loaded successfully");
     } catch (error) {
+      console.error("Load notifications failed", error);
       setMessage(error.message || "Failed to load notifications");
     }
   };

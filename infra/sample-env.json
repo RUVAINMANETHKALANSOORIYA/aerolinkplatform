@@ -1,0 +1,8 @@
+{
+  "USERS_TABLE": "AeroLinkUsers",
+  "FLIGHTS_TABLE": "AeroLinkFlights",
+  "BOOKINGS_TABLE": "AeroLinkBookings",
+  "BAGGAGE_TABLE": "AeroLinkBaggage",
+  "SCHEDULES_TABLE": "AeroLinkSchedules",
+  "NOTIFICATIONS_TABLE": "AeroLinkNotifications"
+}

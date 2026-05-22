@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  AeroLink serverless infrastructure (SAM template).
+  Deploys a single Lambda function that implements the public HTTP API
+  and the required DynamoDB tables used by the Lambda handler in
+  `services/aws_lambda/lambda_function.py`.
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 512
+
+Resources:
+  ApiGateway:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: AeroLinkHttpApi
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - OPTIONS
+
+  AeroLinkServerlessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: AeroLinkServerlessHandler
+      Handler: lambda_function.lambda_handler
+      CodeUri: ../services/aws_lambda
+      Description: Central Lambda handling AeroLink HTTP API routes
+      Events:
+        ProxyApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Method: ANY
+            Path: /{proxy+}
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref AeroLinkUsersTable
+          FLIGHTS_TABLE: !Ref AeroLinkFlightsTable
+          BOOKINGS_TABLE: !Ref AeroLinkBookingsTable
+          BAGGAGE_TABLE: !Ref AeroLinkBaggageTable
+          SCHEDULES_TABLE: !Ref AeroLinkSchedulesTable
+          NOTIFICATIONS_TABLE: !Ref AeroLinkNotificationsTable
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Scan
+                - dynamodb:Query
+                - dynamodb:DeleteItem
+                - dynamodb:TransactWriteItems
+                - dynamodb:BatchWriteItem
+              Resource:
+                - !GetAtt AeroLinkUsersTable.Arn
+                - !GetAtt AeroLinkFlightsTable.Arn
+                - !GetAtt AeroLinkBookingsTable.Arn
+                - !GetAtt AeroLinkBaggageTable.Arn
+                - !GetAtt AeroLinkSchedulesTable.Arn
+                - !GetAtt AeroLinkNotificationsTable.Arn
+
+  # DynamoDB tables
+  AeroLinkUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AeroLinkUsers
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+
+  AeroLinkFlightsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AeroLinkFlights
+      AttributeDefinitions:
+        - AttributeName: flight_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: flight_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+
+  AeroLinkBookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AeroLinkBookings
+      AttributeDefinitions:
+        - AttributeName: booking_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: booking_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+
+  AeroLinkBaggageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AeroLinkBaggage
+      AttributeDefinitions:
+        - AttributeName: baggage_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: baggage_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+
+  AeroLinkSchedulesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AeroLinkSchedules
+      AttributeDefinitions:
+        - AttributeName: schedule_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: schedule_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+
+  AeroLinkNotificationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AeroLinkNotifications
+      AttributeDefinitions:
+        - AttributeName: notification_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: notification_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint (base URL)"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com"
+
+  LambdaFunctionName:
+    Description: "Lambda function name"
+    Value: !Ref AeroLinkServerlessFunction
+
+  UsersTableName:
+    Description: "DynamoDB Users table name"
+    Value: !Ref AeroLinkUsersTable
+
+  FlightsTableName:
+    Description: "DynamoDB Flights table name"
+    Value: !Ref AeroLinkFlightsTable
+
+  BookingsTableName:
+    Description: "DynamoDB Bookings table name"
+    Value: !Ref AeroLinkBookingsTable
+
+  BaggageTableName:
+    Description: "DynamoDB Baggage table name"
+    Value: !Ref AeroLinkBaggageTable
+
+  SchedulesTableName:
+    Description: "DynamoDB Schedules table name"
+    Value: !Ref AeroLinkSchedulesTable
+
+  NotificationsTableName:
+    Description: "DynamoDB Notifications table name"
+    Value: !Ref AeroLinkNotificationsTable
+
+# Notes:
+# - Lambda logs are delivered automatically to CloudWatch Logs by the
+#   Lambda service when the function executes. Look for the log group
+#   named "/aws/lambda/<FunctionName>" in CloudWatch to collect evidence.
+# - Use the ApiEndpoint output to invoke HTTP routes. The template maps
+#   all incoming paths to the single Lambda handler (proxy) so the function
+#   can dispatch by path.
