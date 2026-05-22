@@ -4,10 +4,7 @@ import { API_BASE_URL } from "./config.js";
 
 async function requestJson(path, options = {}) {
   const url = `${API_BASE_URL}${path}`;
-  const hasBody = options.body !== undefined && options.body !== null;
-
   const headers = {
-    ...(hasBody ? { "Content-Type": "application/json" } : {}),
     ...(options.headers || {}),
   };
 
