@@ -46,6 +46,7 @@ function App() {
   const [baggage, setBaggage] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [flightId, setFlightId] = useState("");
+  const [passengerName, setPassengerName] = useState("Demo Passenger");
   const [baggageId, setBaggageId] = useState("");
   const [baggageStatus, setBaggageStatus] = useState("loaded");
   const [message, setMessage] = useState("");
@@ -111,7 +112,7 @@ function App() {
         method: "POST",
         body: JSON.stringify({
           flight_id: flightId,
-          passenger_name: "Demo Passenger",
+          passenger_name: passengerName,
           seat_count: 1
         })
       });
@@ -207,6 +208,11 @@ function App() {
             value={flightId}
             onChange={(e) => setFlightId(e.target.value)}
             placeholder="Flight ID for booking"
+          />
+          <input
+            value={passengerName}
+            onChange={(e) => setPassengerName(e.target.value)}
+            placeholder="Passenger name"
           />
 
           <div className="list">

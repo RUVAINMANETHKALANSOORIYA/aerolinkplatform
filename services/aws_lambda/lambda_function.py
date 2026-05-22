@@ -159,6 +159,15 @@ def create_notification(message: str, notification_type: str, related_id: str | 
     return normalize_item(notification)
 
 
+def try_create_notification(message: str, notification_type: str, related_id: str | None = None) -> None:
+    try:
+        create_notification(message, notification_type, related_id)
+    except ClientError:
+        # Notifications are useful side effects, but they should not break the
+        # primary write path if the notifications table or permissions are unavailable.
+        pass
+
+
 def build_partial_update_expression(updates: dict[str, Any], excluded_fields: set[str] | None = None) -> tuple[str, dict[str, str], dict[str, Any]]:
     excluded_fields = excluded_fields or set()
     filtered_updates = {key: value for key, value in updates.items() if key not in excluded_fields and value is not None}
@@ -284,7 +293,7 @@ def create_booking(body: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now,
     }
     table(BOOKINGS_TABLE).put_item(Item=to_dynamo_value(booking))
-    create_notification("Your booking has been confirmed.", "booking", booking["booking_id"])
+    try_create_notification("Your booking has been confirmed.", "booking", booking["booking_id"])
 
     booking["available_seats"] = available_seats - seat_count
     return response(201, {"message": "Booking created successfully", "item": normalize_item(booking)})
@@ -307,7 +316,7 @@ def patch_flight_price(flight_id: str, body: dict[str, Any]) -> dict[str, Any]:
             return response(404, {"message": "Flight not found", "item": {"flight_id": flight_id}})
         raise
 
-    create_notification("A flight price has been updated.", "flight", flight_id)
+    try_create_notification("A flight price has been updated.", "flight", flight_id)
     return response(200, {"message": "Flight price updated successfully", "item": get_item(FLIGHTS_TABLE, "flight_id", flight_id)})
 
 
@@ -358,7 +367,7 @@ def update_baggage_status(baggage_id: str, body: dict[str, Any]) -> dict[str, An
             return response(404, {"message": "Baggage not found", "item": {"baggage_id": baggage_id}})
         raise
 
-    create_notification("Your baggage status has been updated.", "baggage", baggage_id)
+    try_create_notification("Your baggage status has been updated.", "baggage", baggage_id)
     return response(200, {"message": "Baggage status updated successfully", "item": get_item(BAGGAGE_TABLE, "baggage_id", baggage_id)})
 
 
@@ -380,7 +389,7 @@ def update_schedule(schedule_id: str, body: dict[str, Any]) -> dict[str, Any]:
             return response(404, {"message": "Schedule not found", "item": {"schedule_id": schedule_id}})
         raise
 
-    create_notification("Your flight schedule has changed.", "schedule", schedule_id)
+    try_create_notification("Your flight schedule has changed.", "schedule", schedule_id)
     return response(200, {"message": "Schedule updated successfully", "item": get_item(SCHEDULES_TABLE, "schedule_id", schedule_id)})
 
 
