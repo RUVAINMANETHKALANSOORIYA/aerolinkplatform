@@ -20,8 +20,10 @@ BAGGAGE_TABLE = os.getenv("BAGGAGE_TABLE", "AeroLinkBaggage")
 SCHEDULES_TABLE = os.getenv("SCHEDULES_TABLE", "AeroLinkSchedules")
 NOTIFICATIONS_TABLE = os.getenv("NOTIFICATIONS_TABLE", "AeroLinkNotifications")
 
+CORS_ORIGIN = "https://main.d1qn3y6dlgkh7a.amplifyapp.com"
+
 CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": CORS_ORIGIN,
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
     "Content-Type": "application/json",
