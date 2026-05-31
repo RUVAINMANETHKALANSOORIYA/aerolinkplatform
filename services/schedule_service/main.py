@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 import pika
 import json
+import os
 import models
 import database
 import sys
@@ -60,11 +61,14 @@ def metrics_endpoint():
     return get_metrics(SERVICE_NAME)
 
 
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+
+
 def send_event(event_type: str, data: dict):
     """Publish an event to RabbitMQ."""
     try:
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='rabbitmq', heartbeat=600, blocked_connection_timeout=300)
+            pika.URLParameters(RABBITMQ_URL)
         )
         channel = connection.channel()
         channel.queue_declare(queue='aerolink_events', durable=True)

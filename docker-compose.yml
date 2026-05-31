@@ -22,11 +22,16 @@ services:
     ports:
       - "8080:8000"       # Public Swagger UI: http://localhost:8080/docs
     environment:
+      PUBLIC_BASE_URL: http://localhost:8080
       AUTH_SERVICE_URL: http://auth_service:8000
       FLIGHT_SERVICE_URL: http://flight_service:8000
       BOOKING_SERVICE_URL: http://booking_service:8000
       BAGGAGE_SERVICE_URL: http://baggage_service:8000
       SCHEDULE_SERVICE_URL: http://schedule_service:8000
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-us-east-1_hpW84ZtH4}
+      COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-14hg3aomr5krmmac2ivh7q25bv}
+      COGNITO_ISSUER: ${COGNITO_ISSUER:-https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hpW84ZtH4}
     depends_on:
       - auth_service
       - flight_service
@@ -42,6 +47,8 @@ services:
       dockerfile: services/auth_service/Dockerfile
     expose:
       - "8000"            # Internal only; access through API Gateway
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       - rabbitmq
 
@@ -52,6 +59,8 @@ services:
       dockerfile: services/flight_service/Dockerfile
     expose:
       - "8000"            # Internal only; access through API Gateway
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -63,6 +72,8 @@ services:
       dockerfile: services/booking_service/Dockerfile
     expose:
       - "8000"            # Internal only; access through API Gateway
+    environment:
+      FLIGHT_SERVICE_URL: http://flight_service:8000
     depends_on:
       - flight_service
       - auth_service
@@ -74,6 +85,8 @@ services:
       dockerfile: services/baggage_service/Dockerfile
     expose:
       - "8000"            # Internal only; access through API Gateway
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -85,6 +98,8 @@ services:
       dockerfile: services/schedule_service/Dockerfile
     expose:
       - "8000"            # Internal only; access through API Gateway
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -94,6 +109,8 @@ services:
     build:
       context: .
       dockerfile: services/event_consumer/Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy

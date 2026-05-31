@@ -5,6 +5,7 @@ import requests
 import models, database
 import sys
 from pathlib import Path
+import os
 
 # Import observability utilities (works both locally and in Docker)
 services_dir = Path(__file__).parent.parent
@@ -33,7 +34,8 @@ def metrics_endpoint():
     return get_metrics(SERVICE_NAME)
 
 # This URL points to the other service using Docker's internal network
-FLIGHT_SERVICE_URL = "http://flight_service:8000/flights"
+FLIGHT_SERVICE_BASE_URL = os.getenv("FLIGHT_SERVICE_URL", "http://flight_service:8002")
+FLIGHT_SERVICE_URL = f"{FLIGHT_SERVICE_BASE_URL.rstrip('/')}/flights"
 
 # Task 5: Fault Tolerance - Retry 3 times if the flight service is busy/down
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))

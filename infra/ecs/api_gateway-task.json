@@ -1,0 +1,50 @@
+{
+  "family": "aerolink-api-gateway",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/aerolinkApiGatewayTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "api_gateway",
+      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/aerolink/api-gateway:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "PUBLIC_BASE_URL", "value": "http://localhost:8080" },
+        { "name": "AUTH_SERVICE_URL", "value": "http://auth_service:8001" },
+        { "name": "FLIGHT_SERVICE_URL", "value": "http://flight_service:8002" },
+        { "name": "BOOKING_SERVICE_URL", "value": "http://booking_service:8003" },
+        { "name": "BAGGAGE_SERVICE_URL", "value": "http://baggage_service:8004" },
+        { "name": "SCHEDULE_SERVICE_URL", "value": "http://schedule_service:8005" },
+        { "name": "AWS_REGION", "value": "us-east-1" },
+        { "name": "COGNITO_USER_POOL_ID", "value": "us-east-1_hpW84ZtH4" },
+        { "name": "COGNITO_APP_CLIENT_ID", "value": "14hg3aomr5krmmac2ivh7q25bv" },
+        { "name": "COGNITO_ISSUER", "value": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hpW84ZtH4" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/aerolink/api_gateway",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      }
+    }
+  ]
+}

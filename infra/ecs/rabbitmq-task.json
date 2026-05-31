@@ -1,0 +1,47 @@
+{
+  "family": "aerolink-rabbitmq",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/aerolinkRabbitMQTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "rabbitmq",
+      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/aerolink/rabbitmq:3-management",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5672,
+          "hostPort": 5672,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 15672,
+          "hostPort": 15672,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "RABBITMQ_DEFAULT_USER", "value": "guest" },
+        { "name": "RABBITMQ_DEFAULT_PASS", "value": "guest" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/aerolink/rabbitmq",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "rabbitmq-diagnostics ping"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 5,
+        "startPeriod": 20
+      }
+    }
+  ]
+}

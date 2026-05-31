@@ -12,6 +12,7 @@ import pika
 import json
 import time
 import logging
+import os
 from datetime import datetime
 
 logging.basicConfig(
@@ -20,7 +21,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-RABBITMQ_HOST = "rabbitmq"
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 QUEUE_NAME = "aerolink_events"
 
 
@@ -148,13 +149,9 @@ def connect_with_retry(retries: int = 10, delay: int = 5):
     """
     for attempt in range(1, retries + 1):
         try:
-            log.info(f"Connecting to RabbitMQ at '{RABBITMQ_HOST}' (attempt {attempt}/{retries})...")
+            log.info(f"Connecting to RabbitMQ at '{RABBITMQ_URL}' (attempt {attempt}/{retries})...")
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(
-                    host=RABBITMQ_HOST,
-                    heartbeat=600,
-                    blocked_connection_timeout=300
-                )
+                pika.URLParameters(RABBITMQ_URL)
             )
             log.info("✓ Connected to RabbitMQ successfully.")
             return connection

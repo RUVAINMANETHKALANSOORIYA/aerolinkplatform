@@ -37,6 +37,9 @@ def health(db: Session = Depends(database.get_db)):
 def metrics_endpoint():
     return get_metrics(SERVICE_NAME)
 
+
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+
 @app.get("/flights")
 def get_all_flights(db: Session = Depends(database.get_db)):
     return db.query(models.Flight).all()
@@ -69,9 +72,8 @@ def reserve_seat(flight_id: int, db: Session = Depends(database.get_db)):
 
 def send_event(event_type, data):
     try:
-        # We use the service name 'rabbitmq' defined in docker-compose
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='rabbitmq', heartbeat=600, blocked_connection_timeout=300)
+            pika.URLParameters(RABBITMQ_URL)
         )
         channel = connection.channel()
         channel.queue_declare(queue='aerolink_events', durable=True)
