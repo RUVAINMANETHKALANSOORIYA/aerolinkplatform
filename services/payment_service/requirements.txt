@@ -3,3 +3,5 @@ uvicorn
 sqlalchemy
 pydantic
 requests
+boto3
+boto3

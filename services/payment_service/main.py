@@ -17,7 +17,8 @@ from shared_observability import HealthChecker, RequestIDMiddleware, get_metrics
 import database
 import models
 
-models.Base.metadata.create_all(bind=database.engine)
+if not database.use_dynamodb():
+    models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="AeroLink Payment Service")
 SERVICE_NAME = "payment_service"
@@ -30,7 +31,7 @@ VALID_PAYMENT_RESULTS = {"SUCCESS", "FAILED", "PENDING"}
 
 
 class PaymentCreate(BaseModel):
-    booking_id: int
+    booking_id: str | int
     amount: float
     payment_method: str
     payment_result: str
@@ -40,16 +41,27 @@ class PaymentCreate(BaseModel):
 
 
 class PaymentOut(BaseModel):
-    id: int
-    booking_id: int
+    id: str | int
+    booking_id: str | int
     amount: float
     payment_method: str
     payment_status: str
     transaction_reference: str
-    created_at: datetime
+    created_at: datetime | str
 
 
-def serialize_payment(payment: models.Payment) -> dict:
+def serialize_payment(payment: models.Payment | dict) -> dict:
+    if isinstance(payment, dict):
+        return {
+            "id": payment.get("payment_id", payment.get("id")),
+            "booking_id": payment.get("booking_id"),
+            "amount": payment.get("amount"),
+            "payment_method": payment.get("payment_method"),
+            "payment_status": payment.get("payment_status"),
+            "transaction_reference": payment.get("transaction_reference"),
+            "created_at": payment.get("created_at"),
+        }
+
     return {
         "id": payment.id,
         "booking_id": payment.booking_id,
@@ -71,6 +83,26 @@ def update_booking_status(booking_id: int, status: str) -> None:
         raise HTTPException(status_code=502, detail="Booking Service update failed")
 
 
+def _sqlite_payment_items(db: Session):
+    return db.query(models.Payment).order_by(models.Payment.id.desc()).all()
+
+
+def _sqlite_get_payment(payment_id: str, db: Session):
+    try:
+        payment_key = int(payment_id)
+    except ValueError:
+        return None
+    return db.query(models.Payment).filter(models.Payment.id == payment_key).first()
+
+
+def _sqlite_payment_by_booking(booking_id: str, db: Session):
+    try:
+        booking_key = int(booking_id)
+    except ValueError:
+        return []
+    return db.query(models.Payment).filter(models.Payment.booking_id == booking_key).order_by(models.Payment.id.desc()).all()
+
+
 @app.get("/")
 def read_root():
     return {"message": "AeroLink Payment Service is Online"}
@@ -79,7 +111,7 @@ def read_root():
 @app.get("/health")
 def health(db: Session = Depends(database.get_db)):
     try:
-        db_status = health_checker.check_database(db)
+        db_status = database.backend_health() if database.use_dynamodb() else health_checker.check_database(db)
     except Exception as e:
         db_status = f"error: {str(e)}"
     return health_checker.get_health_status(db_status=db_status, rabbitmq_status="not_configured")
@@ -96,17 +128,28 @@ def create_payment(payment: PaymentCreate, db: Session = Depends(database.get_db
     if payment_status not in VALID_PAYMENT_RESULTS:
         raise HTTPException(status_code=400, detail="payment_result must be SUCCESS, FAILED, or PENDING")
 
-    new_payment = models.Payment(
-        booking_id=payment.booking_id,
-        amount=payment.amount,
-        payment_method=payment.payment_method.strip(),
-        payment_status=payment_status,
-        transaction_reference=f"PAY-{uuid.uuid4().hex[:16].upper()}",
-        created_at=datetime.utcnow(),
-    )
-    db.add(new_payment)
-    db.commit()
-    db.refresh(new_payment)
+    transaction_reference = f"PAY-{uuid.uuid4().hex[:16].upper()}"
+
+    if database.use_dynamodb():
+        new_payment = database.create_payment_item(
+            booking_id=payment.booking_id,
+            amount=payment.amount,
+            payment_method=payment.payment_method.strip(),
+            payment_status=payment_status,
+            transaction_reference=transaction_reference,
+        )
+    else:
+        new_payment = models.Payment(
+            booking_id=int(payment.booking_id),
+            amount=payment.amount,
+            payment_method=payment.payment_method.strip(),
+            payment_status=payment_status,
+            transaction_reference=transaction_reference,
+            created_at=datetime.utcnow(),
+        )
+        db.add(new_payment)
+        db.commit()
+        db.refresh(new_payment)
 
     if payment_status == "SUCCESS":
         update_booking_status(payment.booking_id, "CONFIRMED")
@@ -118,25 +161,22 @@ def create_payment(payment: PaymentCreate, db: Session = Depends(database.get_db
 
 @app.get("/payments")
 def get_payments(db: Session = Depends(database.get_db)):
-    return [serialize_payment(payment) for payment in db.query(models.Payment).order_by(models.Payment.id.desc()).all()]
+    if database.use_dynamodb():
+        return [serialize_payment(item) for item in database.list_payment_items()]
+    return [serialize_payment(payment) for payment in _sqlite_payment_items(db)]
 
 
 @app.get("/payments/booking/{booking_id}")
-def get_payments_by_booking(booking_id: int, db: Session = Depends(database.get_db)):
-    payments = (
-        db.query(models.Payment)
-        .filter(models.Payment.booking_id == booking_id)
-        .order_by(models.Payment.id.desc())
-        .all()
-    )
+def get_payments_by_booking(booking_id: str, db: Session = Depends(database.get_db)):
+    payments = database.get_payment_items_by_booking(booking_id) if database.use_dynamodb() else _sqlite_payment_by_booking(booking_id, db)
     if not payments:
         raise HTTPException(status_code=404, detail="No payments found for booking")
     return [serialize_payment(payment) for payment in payments]
 
 
 @app.get("/payments/{payment_id}")
-def get_payment(payment_id: int, db: Session = Depends(database.get_db)):
-    payment = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
+def get_payment(payment_id: str, db: Session = Depends(database.get_db)):
+    payment = database.get_payment_item(payment_id) if database.use_dynamodb() else _sqlite_get_payment(payment_id, db)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
     return serialize_payment(payment)

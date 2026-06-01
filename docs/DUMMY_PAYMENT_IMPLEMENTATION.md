@@ -1,13 +1,22 @@
 # Dummy Payment Implementation
 
-This workspace now includes a **local-only dummy payment service** under `services/payment_service/`.
+This workspace now includes a **dummy payment service** under `services/payment_service/`.
 
 ## Scope
 
 - FastAPI service with in-memory-safe payment fields only.
-- No card number, CVV, expiry date, passwords, or tokens are accepted or stored.
-- Booking status is updated directly through the local booking service.
-- No EventBridge or AWS resource changes are included.
+- No card number, CVV, expiry date, passwords, bank credentials, or real payment data are accepted or stored.
+- Booking status is updated directly through the local booking service in SQLite mode.
+- DynamoDB support is implemented in code for AWS mode, but ECS deployment is not yet complete.
+- EventBridge notifications are still pending.
+
+## Local Docker Defaults
+
+Local Docker development uses SQLite by default.
+
+- `BOOKING_STORAGE_BACKEND=sqlite`
+- `PAYMENT_STORAGE_BACKEND=sqlite`
+- `PAYMENT_SERVICE_URL=http://payment_service:8000`
 
 ## Endpoints
 
@@ -68,7 +77,7 @@ Use the API gateway base URL: `http://localhost:8080`
 {
   "booking_id": 1,
   "amount": 125.50,
-  "payment_method": "CARD",
+  "payment_method": "SIMULATED_CARD",
   "payment_result": "SUCCESS"
 }
 ```
@@ -129,3 +138,26 @@ This implementation uses SQLite locally for the dummy service.
 - `Base.metadata.create_all(...)` creates the new payment table on startup.
 
 If you already have a running container with an older schema, rebuild the service or remove the SQLite file so the new columns are created fresh.
+
+## AWS ECS Persistence
+
+AWS ECS Fargate mode uses DynamoDB for durable persistence.
+
+- Booking Service: `BOOKING_STORAGE_BACKEND=dynamodb`
+- Booking table: `AeroLinkBookings`
+- Payment Service: `PAYMENT_STORAGE_BACKEND=dynamodb`
+- Payment table: `AeroLinkPayments`
+- AWS Region: `us-east-1`
+
+Schema notes:
+
+- `AeroLinkBookings` uses String `booking_id` values in DynamoDB mode.
+- `AeroLinkPayments` uses String `payment_id` values.
+- Local SQLite integer booking IDs are only for local testing and are not interchangeable with AWS UUID booking IDs.
+
+Current deployment status:
+
+- DynamoDB support is implemented and mock-tested in code.
+- The Payment Service has not yet been deployed to ECS Fargate.
+- Live ALB-to-ECS-to-DynamoDB payment evidence is still pending.
+- EventBridge notifications are still pending.

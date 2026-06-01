@@ -3,5 +3,6 @@ uvicorn
 sqlalchemy
 pydantic
 requests
+boto3
 pika
 tenacity

@@ -76,6 +76,7 @@ services:
       - "8000"            # Internal only; access through API Gateway
     environment:
       FLIGHT_SERVICE_URL: http://flight_service:8000
+      BOOKING_STORAGE_BACKEND: sqlite
     depends_on:
       - flight_service
       - auth_service
@@ -89,6 +90,7 @@ services:
       - "8000"            # Internal only; access through API Gateway
     environment:
       BOOKING_SERVICE_URL: http://booking_service:8000
+      PAYMENT_STORAGE_BACKEND: sqlite
     depends_on:
       - booking_service
 
