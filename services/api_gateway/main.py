@@ -48,6 +48,7 @@ FLIGHT_SERVICE_URL = os.getenv("FLIGHT_SERVICE_URL", "http://flight_service:8002
 BOOKING_SERVICE_URL = os.getenv("BOOKING_SERVICE_URL", "http://booking_service:8003")
 BAGGAGE_SERVICE_URL = os.getenv("BAGGAGE_SERVICE_URL", "http://baggage_service:8004")
 SCHEDULE_SERVICE_URL = os.getenv("SCHEDULE_SERVICE_URL", "http://schedule_service:8005")
+PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://payment_service:8000")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8080")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "us-east-1_hpW84ZtH4")
@@ -171,6 +172,7 @@ def root():
             "bookings": "/api/bookings/*",
             "baggage": "/api/baggage/*",
             "schedules": "/api/schedules/*",
+            "payments": "/api/payments/*",
         },
     }
 
@@ -189,6 +191,7 @@ async def health():
         "booking_service": f"{BOOKING_SERVICE_URL}/health",
         "baggage_service": f"{BAGGAGE_SERVICE_URL}/health",
         "schedule_service": f"{SCHEDULE_SERVICE_URL}/health",
+        "payment_service": f"{PAYMENT_SERVICE_URL}/health",
     }
     dependencies = {name: "error" for name in services}
 
@@ -313,3 +316,23 @@ async def schedule_proxy(request: Request, path: str = ""):
 
     target_path = "/schedules" + (f"/{path}" if path else "")
     return await proxy_request(request, SCHEDULE_SERVICE_URL, target_path)
+
+
+# ── PAYMENT ROUTES ──────────────────────────────────────────────────────────
+@app.api_route("/api/payments", methods=["GET", "POST"])
+@app.api_route("/api/payments/{path:path}", methods=["GET", "POST", "PATCH", "PUT", "DELETE"])
+async def payment_proxy(request: Request, path: str = ""):
+    user = await verify_user(request)
+
+    if request.method == "POST":
+        require_groups(user, [PASSENGER_GROUP])
+    elif request.method == "GET":
+        if path == "":
+            require_groups(user, [STAFF_GROUP])
+        else:
+            require_groups(user, [PASSENGER_GROUP, STAFF_GROUP])
+    else:
+        require_groups(user, [STAFF_GROUP])
+
+    target_path = "/payments" + (f"/{path}" if path else "")
+    return await proxy_request(request, PAYMENT_SERVICE_URL, target_path)

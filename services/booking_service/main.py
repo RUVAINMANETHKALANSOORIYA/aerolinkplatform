@@ -6,6 +6,7 @@ import models, database
 import sys
 from pathlib import Path
 import os
+from pydantic import BaseModel
 
 # Import observability utilities (works both locally and in Docker)
 services_dir = Path(__file__).parent.parent
@@ -37,6 +38,7 @@ def metrics_endpoint():
 FLIGHT_SERVICE_BASE_URL = os.getenv("FLIGHT_SERVICE_URL", "http://flight_service:8002")
 FLIGHT_SERVICE_URL = f"{FLIGHT_SERVICE_BASE_URL.rstrip('/')}/flights"
 
+
 # Task 5: Fault Tolerance - Retry 3 times if the flight service is busy/down
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def call_flight_service(flight_id):
@@ -51,10 +53,34 @@ def create_booking(name: str, flight_id: int, db: Session = Depends(database.get
         # Use our retry-enabled function
         call_flight_service(flight_id)
         
-        new_booking = models.Booking(passenger_name=name, flight_id=flight_id, status="Confirmed")
+        new_booking = models.Booking(passenger_name=name, flight_id=flight_id, status="PENDING_PAYMENT")
         db.add(new_booking)
         db.commit()
         db.refresh(new_booking)
         return new_booking
     except Exception as e:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
+
+
+class BookingStatusUpdate(BaseModel):
+    status: str
+
+
+@app.get("/bookings/{booking_id}")
+def get_booking(booking_id: int, db: Session = Depends(database.get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking
+
+
+@app.patch("/bookings/{booking_id}/status")
+def update_booking_status(booking_id: int, payload: BookingStatusUpdate, db: Session = Depends(database.get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    booking.status = payload.status
+    db.commit()
+    db.refresh(booking)
+    return booking

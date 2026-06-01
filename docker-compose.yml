@@ -28,6 +28,7 @@ services:
       BOOKING_SERVICE_URL: http://booking_service:8000
       BAGGAGE_SERVICE_URL: http://baggage_service:8000
       SCHEDULE_SERVICE_URL: http://schedule_service:8000
+      PAYMENT_SERVICE_URL: http://payment_service:8000
       AWS_REGION: ${AWS_REGION:-us-east-1}
       COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-us-east-1_hpW84ZtH4}
       COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-14hg3aomr5krmmac2ivh7q25bv}
@@ -38,6 +39,7 @@ services:
       - booking_service
       - baggage_service
       - schedule_service
+      - payment_service
     restart: on-failure
 
   # ── AUTH SERVICE (JWT) ──────────────────────────────────────────────────────
@@ -77,6 +79,18 @@ services:
     depends_on:
       - flight_service
       - auth_service
+
+  # ── PAYMENT SERVICE ───────────────────────────────────────────────────────
+  payment_service:
+    build:
+      context: .
+      dockerfile: services/payment_service/Dockerfile
+    expose:
+      - "8000"            # Internal only; access through API Gateway
+    environment:
+      BOOKING_SERVICE_URL: http://booking_service:8000
+    depends_on:
+      - booking_service
 
   # ── BAGGAGE SERVICE ────────────────────────────────────────────────────────
   baggage_service:
