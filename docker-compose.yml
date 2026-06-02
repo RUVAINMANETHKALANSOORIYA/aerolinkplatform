@@ -91,6 +91,9 @@ services:
     environment:
       BOOKING_SERVICE_URL: http://booking_service:8000
       PAYMENT_STORAGE_BACKEND: sqlite
+      PAYMENT_EVENTS_ENABLED: "false"
+      EVENT_BUS_NAME: "default"
+      EVENT_SOURCE: "aerolink.payment"
     depends_on:
       - booking_service
 

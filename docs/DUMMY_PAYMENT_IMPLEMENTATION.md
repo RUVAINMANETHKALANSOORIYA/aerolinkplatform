@@ -160,4 +160,79 @@ Current deployment status:
 - DynamoDB support is implemented and mock-tested in code.
 - The Payment Service has not yet been deployed to ECS Fargate.
 - Live ALB-to-ECS-to-DynamoDB payment evidence is still pending.
-- EventBridge notifications are still pending.
+- EventBridge notification publishing is implemented in local code (see section below).
+
+---
+
+## EventBridge Payment Notifications
+
+### Local Code Status
+
+EventBridge-based payment notification publishing is now **implemented in local code** as of this milestone.
+
+Changes made:
+
+- `services/payment_service/main.py` — `publish_payment_event()` is called after every
+  successful payment record write **and** booking status update.
+- `services/payment_notification_lambda/lambda_function.py` — new dedicated Lambda handler
+  that receives EventBridge events and stores `UNREAD` notifications in `AeroLinkNotifications`.
+- `docker-compose.yml` — `PAYMENT_EVENTS_ENABLED: "false"` is set for the local
+  `payment_service` container so no real AWS EventBridge calls are ever made during
+  local development or Docker testing.
+
+### AWS Deployment Status
+
+> **Not yet completed or evidenced.**
+>
+> The EventBridge rule, Lambda trigger, and `AeroLinkNotifications` DynamoDB table have
+> **not yet been deployed** to AWS. No live AWS EventBridge events have been produced or
+> consumed by this service. Deployment of this flow remains a future milestone.
+
+### Planned Deployed Flow
+
+```
+Payment Service (ECS Fargate)
+    │  PUT event (PAYMENT_EVENTS_ENABLED=true)
+    ▼
+EventBridge default bus
+    │  Rule: source = "aerolink.payment"
+    │         detail-type IN ["PaymentSucceeded", "PaymentFailed"]
+    ▼
+Payment Notification Lambda
+    │  lambda_handler(event, context)
+    ▼
+AeroLinkNotifications (DynamoDB)
+    notification_status = "UNREAD"
+```
+
+### Event Types
+
+| detail-type        | Trigger condition                | Notification title      |
+|--------------------|----------------------------------|-------------------------|
+| `PaymentSucceeded` | `payment_result=SUCCESS`         | Payment confirmed       |
+| `PaymentFailed`    | `payment_result=FAILED`          | Payment unsuccessful    |
+
+### EventBridge Event Detail Payload
+
+Only the following fields are published. No sensitive data is included.
+
+```json
+{
+  "payment_id": "<uuid>",
+  "booking_id": "<booking-id>",
+  "payment_status": "SUCCESS | FAILED",
+  "booking_status": "CONFIRMED | PAYMENT_FAILED",
+  "transaction_reference": "PAY-...",
+  "created_at": "<ISO-8601 timestamp>"
+}
+```
+
+### Privacy and Security Guarantee
+
+No real card numbers, CVV codes, expiry dates, banking credentials, access tokens,
+passwords or any other sensitive payment instrument data are accepted, stored,
+or published at any stage of this payment flow — including in EventBridge events,
+DynamoDB records, Lambda handlers or API responses.
+
+The `payment_method` field accepts only the literal string `SIMULATED_CARD`.
+The `payment_result` field accepts only `SUCCESS`, `FAILED`, or `PENDING`.

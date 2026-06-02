@@ -1,9 +1,11 @@
+import json
 import os
 import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 
+import boto3
 import requests
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
@@ -28,6 +30,71 @@ health_checker = HealthChecker(SERVICE_NAME)
 
 BOOKING_SERVICE_URL = os.getenv("BOOKING_SERVICE_URL", "http://booking_service:8000")
 VALID_PAYMENT_RESULTS = {"SUCCESS", "FAILED", "PENDING"}
+
+# ── EventBridge configuration ────────────────────────────────────────────────
+# PAYMENT_EVENTS_ENABLED must be explicitly set to "true" to publish events.
+# Local Docker Compose keeps this "false" so no real AWS calls are made.
+PAYMENT_EVENTS_ENABLED = os.getenv("PAYMENT_EVENTS_ENABLED", "false").strip().lower() == "true"
+EVENT_BUS_NAME = os.getenv("EVENT_BUS_NAME", "default")
+EVENT_SOURCE = os.getenv("EVENT_SOURCE", "aerolink.payment")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+
+def publish_payment_event(
+    detail_type: str,
+    payment_id: str,
+    booking_id: str,
+    payment_status: str,
+    booking_status: str,
+    transaction_reference: str,
+    created_at: str,
+) -> None:
+    """Publish a safe EventBridge event after payment and booking update.
+
+    Only called when PAYMENT_EVENTS_ENABLED is true.
+    The detail payload deliberately excludes all sensitive fields:
+    amount, card numbers, CVV, expiry dates, banking credentials.
+    A publishing failure is logged but does not alter the already-successful
+    API response.
+    """
+    if not PAYMENT_EVENTS_ENABLED:
+        return
+
+    # Build safe detail — no amount, no card data, no credentials.
+    detail_payload = {
+        "payment_id": payment_id,
+        "booking_id": str(booking_id),
+        "payment_status": payment_status,
+        "booking_status": booking_status,
+        "transaction_reference": transaction_reference,
+        "created_at": str(created_at),
+    }
+
+    try:
+        events_client = boto3.client("events", region_name=AWS_REGION)
+        result = events_client.put_events(
+            Entries=[
+                {
+                    "Source": EVENT_SOURCE,
+                    "DetailType": detail_type,
+                    "Detail": json.dumps(detail_payload),
+                    "EventBusName": EVENT_BUS_NAME,
+                }
+            ]
+        )
+        if result.get("FailedEntryCount", 0) > 0:
+            logger.error(
+                "EventBridge put_events had failed entries",
+                extra={
+                    "detail_type": detail_type,
+                    "failed_entries": result.get("Entries", []),
+                },
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "EventBridge publish failed — payment response unchanged",
+            extra={"detail_type": detail_type, "error": str(exc)},
+        )
 
 
 class PaymentCreate(BaseModel):
@@ -153,8 +220,26 @@ def create_payment(payment: PaymentCreate, db: Session = Depends(database.get_db
 
     if payment_status == "SUCCESS":
         update_booking_status(payment.booking_id, "CONFIRMED")
+        publish_payment_event(
+            detail_type="PaymentSucceeded",
+            payment_id=str(new_payment["payment_id"] if isinstance(new_payment, dict) else new_payment.id),
+            booking_id=str(payment.booking_id),
+            payment_status="SUCCESS",
+            booking_status="CONFIRMED",
+            transaction_reference=transaction_reference,
+            created_at=new_payment["created_at"] if isinstance(new_payment, dict) else str(new_payment.created_at),
+        )
     elif payment_status == "FAILED":
         update_booking_status(payment.booking_id, "PAYMENT_FAILED")
+        publish_payment_event(
+            detail_type="PaymentFailed",
+            payment_id=str(new_payment["payment_id"] if isinstance(new_payment, dict) else new_payment.id),
+            booking_id=str(payment.booking_id),
+            payment_status="FAILED",
+            booking_status="PAYMENT_FAILED",
+            transaction_reference=transaction_reference,
+            created_at=new_payment["created_at"] if isinstance(new_payment, dict) else str(new_payment.created_at),
+        )
 
     return serialize_payment(new_payment)
 
