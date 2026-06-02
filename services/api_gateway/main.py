@@ -24,6 +24,7 @@ from typing import Any, Iterable
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
 from jwt import InvalidTokenError, PyJWKClient, decode as jwt_decode
 
 # Import observability utilities (works both locally and in Docker)
@@ -36,6 +37,23 @@ app = FastAPI(
     title="AeroLink API Gateway",
     version="1.0.0",
     description="Central routing and authentication gateway for AeroLink microservices.",
+)
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173"
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # Add observability middleware
