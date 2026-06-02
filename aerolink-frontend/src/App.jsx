@@ -1,6 +1,11 @@
 import { useState } from "react";
 import "./App.css";
 import { API_BASE_URL } from "./config.js";
+import { cognitoLogin, cognitoLogout } from "./auth.js";
+
+// ── HTTP helper ───────────────────────────────────────────────────────────────
+// Reads the Cognito access token from localStorage and sends it as
+// Authorization: Bearer <token> on every request that carries a token.
 
 async function requestJson(path, options = {}) {
   const url = `${API_BASE_URL}${path}`;
@@ -8,17 +13,17 @@ async function requestJson(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  // Attach Authorization header when token is present
+  // Attach Cognito access token when present
   try {
     const token = localStorage.getItem("token");
     if (token && !headers.Authorization && !headers.authorization) {
       headers["Authorization"] = `Bearer ${token}`;
     }
   } catch (e) {
-    // ignore localStorage errors
+    // ignore localStorage errors in restricted environments
   }
 
-  // Add Content-Type for requests with a body (avoid for GET)
+  // Add Content-Type for requests with a body
   if (options.body && !(headers["Content-Type"] || headers["content-type"])) {
     headers["Content-Type"] = "application/json";
   }
@@ -39,20 +44,17 @@ async function requestJson(path, options = {}) {
         statusText: response.statusText,
         response: data,
       });
-      throw new Error(data?.message || `Request failed with status ${response.status}`);
+      throw new Error(data?.detail || data?.message || `Request failed with status ${response.status}`);
     }
 
     return data;
   } catch (error) {
-    console.error("Fetch error", {
-      url,
-      path,
-      options,
-      error,
-    });
+    console.error("Fetch error", { url, path, options, error });
     throw error;
   }
 }
+
+// ── App ───────────────────────────────────────────────────────────────────────
 
 function App() {
   const [health, setHealth] = useState(null);
@@ -70,14 +72,13 @@ function App() {
   const [baggageId, setBaggageId] = useState("");
   const [baggageStatus, setBaggageStatus] = useState("loaded");
   const [message, setMessage] = useState("");
-  const [regUsername, setRegUsername] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const [regFullName, setRegFullName] = useState("");
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [staffUsername, setStaffUsername] = useState("");
   const [staffPassword, setStaffPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
 
+  // ── Health (public — no auth required) ─────────────────────────────────────
   const checkHealth = async () => {
     try {
       const data = await requestJson("/health");
@@ -89,54 +90,50 @@ function App() {
     }
   };
 
-  const registerPassenger = async () => {
-    try {
-      const data = await requestJson("/auth/register", {
-        method: "POST",
-        body: JSON.stringify({ username: regUsername, password: regPassword, full_name: regFullName }),
-      });
-      // store token
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("username", data.username);
-      localStorage.setItem("role", data.role);
-      setAuth({ token: data.token, username: data.username, role: data.role });
-      setMessage(data.message || "Registered and logged in");
-    } catch (error) {
-      console.error("Register failed", error);
-      setMessage(error.message || "Registration failed");
-    }
-  };
+  // ── Cognito login ──────────────────────────────────────────────────────────
+  // Both Passenger and Staff authenticate directly against Cognito.
+  // The ECS API Gateway enforces group-based RBAC using the returned access token.
 
   const login = async (isStaff = false) => {
+    const user = isStaff ? staffUsername : loginUsername;
+    const pass = isStaff ? staffPassword : loginPassword;
+
+    if (!user || !pass) {
+      setMessage("Please enter a username and password.");
+      return;
+    }
+
+    setLoginLoading(true);
+    setMessage("");
+
     try {
-      const user = isStaff ? staffUsername : loginUsername;
-      const pass = isStaff ? staffPassword : loginPassword;
-      const data = await requestJson("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ username: user, password: pass }),
-      });
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("username", data.username);
-      localStorage.setItem("role", data.role);
-      setAuth({ token: data.token, username: data.username, role: data.role });
-      setMessage("Logged in");
+      const result = await cognitoLogin(user, pass);
+      setAuth({ token: result.accessToken, username: result.username, role: result.role });
+      setMessage(`Signed in as ${result.username} (${result.role})`);
     } catch (error) {
-      console.error("Login failed", error);
-      setMessage(error.message || "Login failed");
+      console.error("Cognito login failed", error);
+      setMessage(error.message || "Login failed. Please check your credentials.");
+    } finally {
+      setLoginLoading(false);
     }
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("username");
-    localStorage.removeItem("role");
+    cognitoLogout();
     setAuth({ token: null, username: null, role: null });
-    setMessage("Logged out");
+    setFlights([]);
+    setBookings([]);
+    setBaggage([]);
+    setNotifications([]);
+    setHealth(null);
+    setMessage("Signed out.");
   };
+
+  // ── Flights (/api/flights) ─────────────────────────────────────────────────
 
   const getFlights = async () => {
     try {
-      const data = await requestJson("/flights");
+      const data = await requestJson("/api/flights");
       setFlights(data.items || []);
       setMessage(data.message || "Flights loaded successfully");
     } catch (error) {
@@ -147,22 +144,22 @@ function App() {
 
   const createFlight = async () => {
     try {
-      const data = await requestJson("/flights", {
+      const data = await requestJson("/api/flights", {
         method: "POST",
         body: JSON.stringify({
           flight_no: "AL-FRONTEND-101",
           origin: "CMB",
           destination: "DXB",
           total_seats: 100,
-          price: "320.00"
-        })
+          price: "320.00",
+        }),
       });
 
       const newFlightId = data.item?.flight_id;
 
       if (newFlightId) {
         setFlightId(newFlightId);
-        setMessage(data.message || `Flight created successfully. Flight ID: ${newFlightId}`);
+        setMessage(data.message || `Flight created. ID: ${newFlightId}`);
         getFlights();
       } else {
         setMessage(data.message || "Flight created, but flight ID was not returned");
@@ -173,22 +170,22 @@ function App() {
     }
   };
 
+  // ── Bookings (/api/bookings) ───────────────────────────────────────────────
+
   const createBooking = async () => {
     if (!flightId) {
       setMessage("Please create or enter a flight ID first");
       return;
     }
-
     try {
-      const data = await requestJson("/bookings", {
+      const data = await requestJson("/api/bookings", {
         method: "POST",
         body: JSON.stringify({
           flight_id: flightId,
           passenger_name: passengerName,
-          seat_count: 1
-        })
+          seat_count: 1,
+        }),
       });
-
       setMessage(data.message || "Booking created successfully");
       getBookings();
     } catch (error) {
@@ -199,7 +196,7 @@ function App() {
 
   const getBookings = async () => {
     try {
-      const data = await requestJson("/bookings");
+      const data = await requestJson("/api/bookings");
       setBookings(data.items || []);
       setMessage(data.message || "Bookings loaded successfully");
     } catch (error) {
@@ -208,9 +205,11 @@ function App() {
     }
   };
 
+  // ── Baggage (/api/baggage) ─────────────────────────────────────────────────
+
   const getBaggage = async () => {
     try {
-      const data = await requestJson("/baggage");
+      const data = await requestJson("/api/baggage");
       setBaggage(data.items || []);
       setMessage(data.message || "Baggage loaded successfully");
     } catch (error) {
@@ -224,13 +223,11 @@ function App() {
       setMessage("Please enter a baggage ID first");
       return;
     }
-
     try {
-      const data = await requestJson(`/baggage/${baggageId}/status`, {
+      const data = await requestJson(`/api/baggage/${baggageId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status: baggageStatus })
+        body: JSON.stringify({ status: baggageStatus }),
       });
-
       setMessage(data.message || "Baggage status updated successfully");
       getBaggage();
     } catch (error) {
@@ -239,9 +236,12 @@ function App() {
     }
   };
 
+  // ── Notifications (stub — endpoint not yet available on ECS) ───────────────
+  // getNotifications is kept but disabled in the UI until the notification_service
+  // ECS microservice and /api/notifications gateway route are implemented.
   const getNotifications = async () => {
     try {
-      const data = await requestJson("/notifications");
+      const data = await requestJson("/api/notifications");
       setNotifications(data.items || []);
       setMessage(data.message || "Notifications loaded successfully");
     } catch (error) {
@@ -250,17 +250,21 @@ function App() {
     }
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="page">
       <header className="hero">
         <p className="tag">AeroLink Airline Systems Platform</p>
         <h1>Cloud-Based Airline Dashboard</h1>
         <p>
-          React frontend connected to AWS API Gateway, Lambda, DynamoDB, and CORS-enabled serverless routes.
+          React frontend connected to the AeroLink ECS Fargate backend via the
+          Application Load Balancer. Authentication uses Amazon Cognito.
         </p>
       </header>
 
       <section className="cards">
+        {/* ── System Health ── */}
         <div className="card">
           <h2>System Health</h2>
           <button onClick={checkHealth}>Check Health</button>
@@ -269,53 +273,87 @@ function App() {
           )}
         </div>
 
+        {/* ── Authentication ── */}
         <div className="card">
           <h2>Authentication</h2>
           {!auth.token ? (
             <div>
               <div>
-                <h4>Passenger Register</h4>
-                <input placeholder="username" value={regUsername} onChange={(e) => setRegUsername(e.target.value)} />
-                <input placeholder="password" type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
-                <input placeholder="full name" value={regFullName} onChange={(e) => setRegFullName(e.target.value)} />
-                <button onClick={registerPassenger}>Register</button>
-              </div>
-
-              <div>
                 <h4>Passenger Login</h4>
-                <input placeholder="username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} />
-                <input placeholder="password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
-                <button onClick={() => login(false)}>Login</button>
+                <input
+                  id="passenger-username"
+                  placeholder="Cognito username"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                />
+                <input
+                  id="passenger-password"
+                  placeholder="Password"
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
+                <button
+                  id="passenger-login-btn"
+                  onClick={() => login(false)}
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? "Signing in…" : "Passenger Login"}
+                </button>
               </div>
 
               <div>
                 <h4>Staff Login</h4>
-                <input placeholder="username" value={staffUsername} onChange={(e) => setStaffUsername(e.target.value)} />
-                <input placeholder="password" type="password" value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} />
-                <button onClick={() => login(true)}>Staff Login</button>
+                <input
+                  id="staff-username"
+                  placeholder="Cognito username"
+                  value={staffUsername}
+                  onChange={(e) => setStaffUsername(e.target.value)}
+                />
+                <input
+                  id="staff-password"
+                  placeholder="Password"
+                  type="password"
+                  value={staffPassword}
+                  onChange={(e) => setStaffPassword(e.target.value)}
+                />
+                <button
+                  id="staff-login-btn"
+                  onClick={() => login(true)}
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? "Signing in…" : "Staff Login"}
+                </button>
               </div>
             </div>
           ) : (
             <div>
-              <div>Signed in as: <strong>{auth.username}</strong> ({auth.role})</div>
-              <button onClick={logout}>Logout</button>
+              <div>
+                Signed in as: <strong>{auth.username}</strong> ({auth.role})
+              </div>
+              <button id="logout-btn" onClick={logout}>
+                Sign Out
+              </button>
             </div>
           )}
         </div>
 
+        {/* ── Flights ── */}
         <div className="card">
           <h2>Flights</h2>
           <div className="actions">
-            <button onClick={createFlight}>Create Flight</button>
-            <button onClick={getFlights}>View Flights</button>
+            <button id="create-flight-btn" onClick={createFlight}>Create Flight</button>
+            <button id="view-flights-btn" onClick={getFlights}>View Flights</button>
           </div>
 
           <input
+            id="flight-id-input"
             value={flightId}
             onChange={(e) => setFlightId(e.target.value)}
             placeholder="Flight ID for booking"
           />
           <input
+            id="passenger-name-input"
             value={passengerName}
             onChange={(e) => setPassengerName(e.target.value)}
             placeholder="Passenger name"
@@ -333,11 +371,12 @@ function App() {
           </div>
         </div>
 
+        {/* ── Bookings ── */}
         <div className="card">
           <h2>Bookings</h2>
           <div className="actions">
-            <button onClick={createBooking}>Create Booking</button>
-            <button onClick={getBookings}>View Bookings</button>
+            <button id="create-booking-btn" onClick={createBooking}>Create Booking</button>
+            <button id="view-bookings-btn" onClick={getBookings}>View Bookings</button>
           </div>
 
           <div className="list">
@@ -352,24 +391,27 @@ function App() {
           </div>
         </div>
 
+        {/* ── Baggage ── */}
         <div className="card">
           <h2>Baggage</h2>
           <div className="actions">
-            <button onClick={getBaggage}>View Baggage</button>
+            <button id="view-baggage-btn" onClick={getBaggage}>View Baggage</button>
           </div>
 
           <input
+            id="baggage-id-input"
             value={baggageId}
             onChange={(e) => setBaggageId(e.target.value)}
             placeholder="Baggage ID"
           />
           <input
+            id="baggage-status-input"
             value={baggageStatus}
             onChange={(e) => setBaggageStatus(e.target.value)}
             placeholder="Status"
           />
           <div className="actions">
-            <button onClick={updateBaggageStatus}>Update Status</button>
+            <button id="update-baggage-btn" onClick={updateBaggageStatus}>Update Status</button>
           </div>
 
           <div className="list">
@@ -383,17 +425,21 @@ function App() {
           </div>
         </div>
 
+        {/* ── Notifications (stub — /api/notifications not yet deployed) ── */}
         <div className="card">
           <h2>Notifications</h2>
-          <div className="actions">
-            <button onClick={getNotifications}>View Notifications</button>
-          </div>
-
+          <p style={{ color: "#6b7280", fontSize: "14px" }}>
+            The notification service endpoint is not yet deployed on ECS.
+            This section will be enabled in the next milestone.
+          </p>
           <div className="list">
             {notifications.map((notification) => (
               <div className="item" key={notification.notification_id}>
-                <strong>{notification.message}</strong>
-                <span>Read: {notification.read ? "Yes" : "No"}</span>
+                <strong>{notification.title || notification.message}</strong>
+                <span>{notification.message}</span>
+                <span>
+                  Status: {notification.notification_status || (notification.read ? "READ" : "UNREAD")}
+                </span>
                 <small>ID: {notification.notification_id}</small>
               </div>
             ))}
