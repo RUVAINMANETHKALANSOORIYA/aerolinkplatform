@@ -3,11 +3,12 @@
  *
  * Centralised HTTP client for the AeroLink ECS backend.
  * Reads API_BASE_URL from config.js (sourced from VITE_API_BASE_URL env var).
- * Attaches the Cognito access token from localStorage as Authorization: Bearer.
+ * Attaches the Cognito access token using the auth helper.
  *
  * No URLs, IDs or secrets are hardcoded here.
  */
 import { API_BASE_URL } from "../config.js";
+import { getStoredAccessToken } from "../auth.js";
 
 async function requestJson(path, options = {}) {
   const url = `${API_BASE_URL}${path}`;
@@ -15,7 +16,7 @@ async function requestJson(path, options = {}) {
 
   // Attach Cognito access token when present
   try {
-    const token = localStorage.getItem("token");
+    const token = getStoredAccessToken();
     if (token && !headers.Authorization && !headers.authorization) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -29,11 +30,30 @@ async function requestJson(path, options = {}) {
 
   const response = await fetch(url, { headers, ...options });
   const rawBody = await response.text();
-  const data = rawBody ? JSON.parse(rawBody) : {};
+  let data = {};
+  if (rawBody) {
+    try {
+      data = JSON.parse(rawBody);
+    } catch {
+      data = { message: rawBody };
+    }
+  }
 
   if (!response.ok) {
     console.error("API error", { url, status: response.status, data });
-    throw new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+    // Friendly error rendering from FastAPI shapes
+    let errorMsg = `Request failed (${response.status})`;
+    if (data?.detail) {
+      if (Array.isArray(data.detail)) {
+        // Validation errors usually look like: [{ loc: ["query", "flight_no"], msg: "field required" }]
+        errorMsg = data.detail.map(e => `${e.loc?.slice(-1)[0] || 'Field'}: ${e.msg}`).join(", ");
+      } else if (typeof data.detail === "string") {
+        errorMsg = data.detail;
+      }
+    } else if (data?.message) {
+      errorMsg = data.message;
+    }
+    throw new Error(errorMsg);
   }
 
   return data;
@@ -47,20 +67,18 @@ export const getHealth = () => requestJson("/health");
 
 export const getFlights = () => requestJson("/api/flights");
 
-export const createFlight = (payload) =>
-  requestJson("/api/flights", {
-    method: "POST",
-    body: JSON.stringify(payload),
+export const createFlight = (flight_no, seats) =>
+  requestJson(`/api/flights?flight_no=${encodeURIComponent(flight_no)}&seats=${encodeURIComponent(seats)}`, {
+    method: "POST"
   });
 
 // ── Bookings ──────────────────────────────────────────────────────────────────
 
 export const getBookings = () => requestJson("/api/bookings");
 
-export const createBooking = (payload) =>
-  requestJson("/api/bookings", {
-    method: "POST",
-    body: JSON.stringify(payload),
+export const createBooking = (name, flight_id) =>
+  requestJson(`/api/bookings?name=${encodeURIComponent(name)}&flight_id=${encodeURIComponent(flight_id)}`, {
+    method: "POST"
   });
 
 // ── Baggage ───────────────────────────────────────────────────────────────────
@@ -68,9 +86,8 @@ export const createBooking = (payload) =>
 export const getBaggage = () => requestJson("/api/baggage");
 
 export const updateBaggageStatus = (baggageId, status) =>
-  requestJson(`/api/baggage/${baggageId}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
+  requestJson(`/api/baggage/${encodeURIComponent(baggageId)}/status?new_status=${encodeURIComponent(status)}`, {
+    method: "PATCH"
   });
 
 // NOTE: /api/notifications is not yet deployed. Do not call it from the frontend.

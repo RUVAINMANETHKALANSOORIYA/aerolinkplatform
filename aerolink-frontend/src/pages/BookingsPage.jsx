@@ -39,11 +39,7 @@ export default function BookingsPage() {
     setCreating(true);
     setError("");
     try {
-      await createBooking({
-        flight_id: flightId,
-        passenger_name: username,
-        seat_count: 1,
-      });
+      await createBooking(username, flightId);
       setFlightId("");
       loadBookings();
     } catch (err) {
@@ -130,7 +126,7 @@ export default function BookingsPage() {
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {bookings.map((booking) => (
-                  <tr key={booking.booking_id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
                     <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">
                       {booking.passenger_name}
                     </td>
@@ -141,7 +137,7 @@ export default function BookingsPage() {
                       {booking.flight_id}
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-400 font-mono text-xs">
-                      {booking.booking_id}
+                      {booking.id}
                     </td>
                   </tr>
                 ))}

@@ -151,11 +151,11 @@ export default function BaggagePage() {
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {bags.map((bag) => (
-                  <tr key={bag.baggage_id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={bag.id} className="hover:bg-slate-50 transition-colors">
                     <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">
                       <div className="flex flex-col">
                         <span>{bag.tag_number || "No tag"}</span>
-                        <span className="text-xs text-slate-400 font-mono mt-0.5">{bag.baggage_id}</span>
+                        <span className="text-xs text-slate-400 font-mono mt-0.5">{bag.id}</span>
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm">
