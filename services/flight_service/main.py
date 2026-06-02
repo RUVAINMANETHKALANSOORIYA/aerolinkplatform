@@ -72,7 +72,28 @@ def get_all_flights(db: Session = Depends(database.get_db)):
     return [serialize_flight(f) for f in db.query(models.Flight).all()]
 
 @app.post("/flights")
-def create_flight(flight_no: str, seats: int, db: Session = Depends(database.get_db)):
+def create_flight(
+    flight_no: str,
+    seats: int,
+    origin: str,
+    destination: str,
+    price: float,
+    db: Session = Depends(database.get_db)
+):
+    flight_no = flight_no.strip()
+    origin = origin.strip().upper()
+    destination = destination.strip().upper()
+
+    if not flight_no:
+        raise HTTPException(status_code=400, detail="Flight number cannot be empty")
+    if len(origin) != 3 or not origin.isalpha():
+        raise HTTPException(status_code=400, detail="Origin must be exactly 3 alphabetical characters")
+    if len(destination) != 3 or not destination.isalpha():
+        raise HTTPException(status_code=400, detail="Destination must be exactly 3 alphabetical characters")
+    if origin == destination:
+        raise HTTPException(status_code=400, detail="Origin and destination cannot be the same")
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="Price must be greater than zero")
     if seats <= 0:
         raise HTTPException(status_code=400, detail="Seats must be greater than zero")
 
@@ -81,7 +102,7 @@ def create_flight(flight_no: str, seats: int, db: Session = Depends(database.get
         if existing:
             raise HTTPException(status_code=400, detail="Flight number already exists")
         try:
-            return serialize_flight(database.create_flight_item(flight_no, seats))
+            return serialize_flight(database.create_flight_item(flight_no, seats, origin, destination, price))
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -91,7 +112,7 @@ def create_flight(flight_no: str, seats: int, db: Session = Depends(database.get
         raise HTTPException(status_code=400, detail="Flight number already exists")
 
     try:
-        new_flight = models.Flight(flight_number=flight_no, available_seats=seats, origin="LHR", destination="JFK", price=450.0)
+        new_flight = models.Flight(flight_number=flight_no, available_seats=seats, origin=origin, destination=destination, price=price)
         db.add(new_flight)
         db.commit()
         db.refresh(new_flight) # <--- ADD THIS LINE
@@ -128,8 +149,8 @@ def send_event(event_type, data):
         channel.queue_declare(queue='aerolink_events', durable=True)
         message = {"type": event_type, "data": data}
         channel.basic_publish(
-            exchange='', 
-            routing_key='aerolink_events', 
+            exchange='',
+            routing_key='aerolink_events',
             body=json.dumps(message),
             properties=pika.BasicProperties(delivery_mode=2) # make message persistent
         )

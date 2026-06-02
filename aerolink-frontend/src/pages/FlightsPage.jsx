@@ -13,6 +13,9 @@ export default function FlightsPage() {
   const [creating, setCreating] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [newFlightNo, setNewFlightNo] = useState("");
+  const [newOrigin, setNewOrigin] = useState("");
+  const [newDestination, setNewDestination] = useState("");
+  const [newPrice, setNewPrice] = useState("");
   const [newSeats, setNewSeats] = useState("");
 
   const loadFlights = async () => {
@@ -34,14 +37,17 @@ export default function FlightsPage() {
 
   const handleCreateFlight = async (e) => {
     e.preventDefault();
-    if (!newFlightNo || !newSeats) return;
+    if (!newFlightNo || !newOrigin || !newDestination || !newPrice || !newSeats) return;
     setCreating(true);
     setError("");
     setSuccessMsg("");
     try {
-      const data = await createFlight(newFlightNo, parseInt(newSeats, 10));
+      const data = await createFlight(newFlightNo, newOrigin, newDestination, parseFloat(newPrice), parseInt(newSeats, 10));
       setSuccessMsg(`Flight ${data.flight_number} created successfully.`);
       setNewFlightNo("");
+      setNewOrigin("");
+      setNewDestination("");
+      setNewPrice("");
       setNewSeats("");
       loadFlights();
     } catch (err) {
@@ -101,7 +107,59 @@ export default function FlightsPage() {
                 />
               </div>
             </div>
-            <div className="w-full sm:flex-1 max-w-[150px]">
+            <div className="w-full sm:flex-1 max-w-[100px]">
+              <label htmlFor="origin" className="block text-sm font-medium leading-6 text-slate-700">
+                Origin
+              </label>
+              <div className="mt-2">
+                <input
+                  type="text"
+                  id="origin"
+                  required
+                  maxLength={3}
+                  value={newOrigin}
+                  onChange={(e) => setNewOrigin(e.target.value)}
+                  className="block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 uppercase"
+                  placeholder="LHR"
+                />
+              </div>
+            </div>
+            <div className="w-full sm:flex-1 max-w-[100px]">
+              <label htmlFor="destination" className="block text-sm font-medium leading-6 text-slate-700">
+                Dest
+              </label>
+              <div className="mt-2">
+                <input
+                  type="text"
+                  id="destination"
+                  required
+                  maxLength={3}
+                  value={newDestination}
+                  onChange={(e) => setNewDestination(e.target.value)}
+                  className="block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 uppercase"
+                  placeholder="JFK"
+                />
+              </div>
+            </div>
+            <div className="w-full sm:flex-1 max-w-[120px]">
+              <label htmlFor="price" className="block text-sm font-medium leading-6 text-slate-700">
+                Price
+              </label>
+              <div className="mt-2">
+                <input
+                  type="number"
+                  id="price"
+                  required
+                  min="1"
+                  step="0.01"
+                  value={newPrice}
+                  onChange={(e) => setNewPrice(e.target.value)}
+                  className="block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
+                  placeholder="e.g. 450"
+                />
+              </div>
+            </div>
+            <div className="w-full sm:flex-1 max-w-[120px]">
               <label htmlFor="seats" className="block text-sm font-medium leading-6 text-slate-700">
                 Seats
               </label>
@@ -120,7 +178,7 @@ export default function FlightsPage() {
             </div>
             <button
               type="submit"
-              disabled={creating || !newFlightNo || !newSeats}
+              disabled={creating || !newFlightNo || !newOrigin || !newDestination || !newPrice || !newSeats}
               className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-70 h-10 w-full sm:w-auto mt-2 sm:mt-0 justify-center"
             >
               {creating ? <LoadingSpinner size="sm" label="" /> : <Plus className="h-4 w-4" />}

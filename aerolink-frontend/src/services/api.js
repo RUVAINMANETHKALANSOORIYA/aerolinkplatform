@@ -67,8 +67,8 @@ export const getHealth = () => requestJson("/health");
 
 export const getFlights = () => requestJson("/api/flights");
 
-export const createFlight = (flight_no, seats) =>
-  requestJson(`/api/flights?flight_no=${encodeURIComponent(flight_no)}&seats=${encodeURIComponent(seats)}`, {
+export const createFlight = (flight_no, origin, destination, price, seats) =>
+  requestJson(`/api/flights?flight_no=${encodeURIComponent(flight_no)}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&price=${encodeURIComponent(price)}&seats=${encodeURIComponent(seats)}`, {
     method: "POST"
   });
 

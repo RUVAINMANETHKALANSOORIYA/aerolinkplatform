@@ -73,7 +73,7 @@ def _to_dynamo_value(value: Any) -> Any:
     return value
 
 
-def create_flight_item(flight_no: str, seats: int, origin: str = "LHR", destination: str = "JFK", price: float = 450.0) -> dict[str, Any]:
+def create_flight_item(flight_no: str, seats: int, origin: str, destination: str, price: float) -> dict[str, Any]:
     now = datetime.utcnow().isoformat() + "Z"
     flight = {
         "flight_id": str(uuid.uuid4()),
