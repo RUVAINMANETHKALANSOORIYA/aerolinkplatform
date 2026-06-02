@@ -11,7 +11,8 @@ if str(services_dir) not in sys.path:
     sys.path.insert(0, str(services_dir))
 from shared_observability import RequestIDMiddleware, get_metrics, HealthChecker, setup_structured_logging
 
-models.Base.metadata.create_all(bind=database.engine)
+if not database.use_dynamodb():
+    models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="AeroLink Flight Service")
 
@@ -28,7 +29,7 @@ def read_root():
 @app.get("/health")
 def health(db: Session = Depends(database.get_db)):
     try:
-        db_status = health_checker.check_database(db)
+        db_status = database.backend_health() if database.use_dynamodb() else health_checker.check_database(db)
     except Exception as e:
         db_status = f"error: {str(e)}"
     return health_checker.get_health_status(db_status=db_status, rabbitmq_status="not_configured")
@@ -40,12 +41,50 @@ def metrics_endpoint():
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
+def serialize_flight(flight):
+    if isinstance(flight, dict):
+        return {
+            "id": flight.get("flight_id"),
+            "flight_number": flight.get("flight_no"),
+            "flight_id": flight.get("flight_id"),
+            "flight_no": flight.get("flight_no"),
+            "origin": flight.get("origin"),
+            "destination": flight.get("destination"),
+            "price": flight.get("price"),
+            "total_seats": flight.get("total_seats"),
+            "available_seats": flight.get("available_seats"),
+            "created_at": flight.get("created_at"),
+            "updated_at": flight.get("updated_at"),
+        }
+    return {
+        "id": flight.id,
+        "flight_number": flight.flight_number,
+        "origin": flight.origin,
+        "destination": flight.destination,
+        "price": flight.price,
+        "available_seats": flight.available_seats
+    }
+
 @app.get("/flights")
 def get_all_flights(db: Session = Depends(database.get_db)):
-    return db.query(models.Flight).all()
+    if database.use_dynamodb():
+        return [serialize_flight(f) for f in database.list_flight_items()]
+    return [serialize_flight(f) for f in db.query(models.Flight).all()]
 
 @app.post("/flights")
 def create_flight(flight_no: str, seats: int, db: Session = Depends(database.get_db)):
+    if seats <= 0:
+        raise HTTPException(status_code=400, detail="Seats must be greater than zero")
+
+    if database.use_dynamodb():
+        existing = [f for f in database.list_flight_items() if f.get("flight_no") == flight_no]
+        if existing:
+            raise HTTPException(status_code=400, detail="Flight number already exists")
+        try:
+            return serialize_flight(database.create_flight_item(flight_no, seats))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     # Check if flight exists to avoid 500 errors
     existing = db.query(models.Flight).filter(models.Flight.flight_number == flight_no).first()
     if existing:
@@ -56,14 +95,24 @@ def create_flight(flight_no: str, seats: int, db: Session = Depends(database.get
         db.add(new_flight)
         db.commit()
         db.refresh(new_flight) # <--- ADD THIS LINE
-        return new_flight
+        return serialize_flight(new_flight)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Critical for the Saga Pattern: This updates seats when a booking happens
 @app.patch("/flights/{flight_id}/reserve")
-def reserve_seat(flight_id: int, db: Session = Depends(database.get_db)):
-    flight = db.query(models.Flight).filter(models.Flight.id == flight_id).first()
+def reserve_seat(flight_id: str, db: Session = Depends(database.get_db)):
+    if database.use_dynamodb():
+        flight = database.reserve_seat_item(flight_id)
+        if not flight:
+            raise HTTPException(status_code=400, detail="No seats available or flight not found")
+        return {"status": "success", "remaining_seats": flight["available_seats"]}
+
+    try:
+        sqlite_flight_id = int(flight_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    flight = db.query(models.Flight).filter(models.Flight.id == sqlite_flight_id).first()
     if not flight or flight.available_seats <= 0:
         raise HTTPException(status_code=400, detail="No seats available")
     flight.available_seats -= 1
@@ -90,12 +139,21 @@ def send_event(event_type, data):
         print(f"FAILED TO SEND EVENT. Error: {str(e)}") # This will tell us EXACTLY what is wrong
 
 @app.patch("/flights/{flight_id}/price")
-def update_price(flight_id: int, new_price: float, db: Session = Depends(database.get_db)):
-    flight = db.query(models.Flight).filter(models.Flight.id == flight_id).first()
-    if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
-    flight.price = new_price
-    db.commit()
+def update_price(flight_id: str, new_price: float, db: Session = Depends(database.get_db)):
+    if database.use_dynamodb():
+        flight = database.update_price_item(flight_id, new_price)
+        if not flight:
+            raise HTTPException(status_code=404, detail="Flight not found")
+    else:
+        try:
+            sqlite_flight_id = int(flight_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        flight = db.query(models.Flight).filter(models.Flight.id == sqlite_flight_id).first()
+        if not flight:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        flight.price = new_price
+        db.commit()
     # Task 4: Real-time sync event
     send_event("PRICE_UPDATED", {"flight_id": flight_id, "new_price": new_price})
     return {"message": "Price updated and broadcasted"}
