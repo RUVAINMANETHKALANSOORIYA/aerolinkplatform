@@ -74,10 +74,10 @@ export const createFlight = (flight_no, origin, destination, price, seats) =>
 
 // ── Bookings ──────────────────────────────────────────────────────────────────
 
-export const getBookings = () => requestJson("/api/bookings");
+export const getBookings = (isPassenger = true) => requestJson(isPassenger ? "/api/bookings/me" : "/api/bookings");
 
-export const createBooking = (name, flight_id) =>
-  requestJson(`/api/bookings?name=${encodeURIComponent(name)}&flight_id=${encodeURIComponent(flight_id)}`, {
+export const createBooking = (name, flight_id, seat_count) =>
+  requestJson(`/api/bookings?name=${encodeURIComponent(name)}&flight_id=${encodeURIComponent(flight_id)}&seat_count=${encodeURIComponent(seat_count)}`, {
     method: "POST"
   });
 

@@ -122,23 +122,44 @@ def create_flight(
 
 # Critical for the Saga Pattern: This updates seats when a booking happens
 @app.patch("/flights/{flight_id}/reserve")
-def reserve_seat(flight_id: str, db: Session = Depends(database.get_db)):
+def reserve_seat(flight_id: str, seat_count: int = 1, db: Session = Depends(database.get_db)):
+    if seat_count <= 0:
+        raise HTTPException(status_code=400, detail="Seat count must be greater than zero")
+
     if database.use_dynamodb():
-        flight = database.reserve_seat_item(flight_id)
+        flight = database.reserve_seat_item(flight_id, seat_count)
         if not flight:
-            raise HTTPException(status_code=400, detail="No seats available or flight not found")
-        return {"status": "success", "remaining_seats": flight["available_seats"]}
+            raise HTTPException(status_code=400, detail="Not enough seats available or flight not found")
+        return {
+            "status": "success",
+            "flight_id": flight["flight_id"],
+            "flight_no": flight["flight_no"],
+            "origin": flight["origin"],
+            "destination": flight["destination"],
+            "price": flight["price"],
+            "reserved_seats": seat_count,
+            "remaining_seats": flight["available_seats"]
+        }
 
     try:
         sqlite_flight_id = int(flight_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Flight not found")
     flight = db.query(models.Flight).filter(models.Flight.id == sqlite_flight_id).first()
-    if not flight or flight.available_seats <= 0:
-        raise HTTPException(status_code=400, detail="No seats available")
-    flight.available_seats -= 1
+    if not flight or flight.available_seats < seat_count:
+        raise HTTPException(status_code=400, detail="Not enough seats available")
+    flight.available_seats -= seat_count
     db.commit()
-    return {"status": "success", "remaining_seats": flight.available_seats}
+    return {
+        "status": "success",
+        "flight_id": flight.id,
+        "flight_no": flight.flight_number,
+        "origin": flight.origin,
+        "destination": flight.destination,
+        "price": flight.price,
+        "reserved_seats": seat_count,
+        "remaining_seats": flight.available_seats
+    }
 
 def send_event(event_type, data):
     try:

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plane, Plus } from "lucide-react";
 import { getFlights, createFlight } from "../services/api.js";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
@@ -6,6 +7,8 @@ import EmptyState from "../components/EmptyState.jsx";
 
 export default function FlightsPage() {
   const isStaff = localStorage.getItem("role") === "staff";
+  const isPassenger = localStorage.getItem("role") === "passenger";
+  const navigate = useNavigate();
   
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +37,10 @@ export default function FlightsPage() {
   useEffect(() => {
     loadFlights();
   }, []);
+
+  const handleBookFlight = (flight) => {
+    navigate("/bookings", { state: { selectedFlight: flight } });
+  };
 
   const handleCreateFlight = async (e) => {
     e.preventDefault();
@@ -208,6 +215,7 @@ export default function FlightsPage() {
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Route</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Seats</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">ID</th>
+                  {isPassenger && <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
@@ -225,6 +233,16 @@ export default function FlightsPage() {
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-400 font-mono text-xs">
                       {flight.id}
                     </td>
+                    {isPassenger && (
+                      <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                        <button
+                          onClick={() => handleBookFlight(flight)}
+                          className="text-blue-600 hover:text-blue-900 font-semibold"
+                        >
+                          Book<span className="sr-only">, {flight.flight_number}</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

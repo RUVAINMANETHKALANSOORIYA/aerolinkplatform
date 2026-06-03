@@ -101,18 +101,17 @@ def list_flight_items() -> list[dict[str, Any]]:
     return sorted(normalized, key=lambda item: str(item.get("created_at", "")), reverse=True)
 
 
-def reserve_seat_item(flight_id: str) -> Optional[dict[str, Any]]:
+def reserve_seat_item(flight_id: str, seat_count: int = 1) -> Optional[dict[str, Any]]:
     now = datetime.utcnow().isoformat() + "Z"
     try:
         response = flight_table().update_item(
             Key={"flight_id": str(flight_id)},
-            UpdateExpression="SET available_seats = available_seats - :one, updated_at = :updated_at",
+            UpdateExpression="SET available_seats = available_seats - :count, updated_at = :updated_at",
             ExpressionAttributeValues={
-                ":one": 1,
-                ":zero": 0,
+                ":count": seat_count,
                 ":updated_at": now
             },
-            ConditionExpression="attribute_exists(flight_id) AND available_seats > :zero",
+            ConditionExpression="attribute_exists(flight_id) AND available_seats >= :count",
             ReturnValues="ALL_NEW"
         )
         return _normalize_item(response.get("Attributes"))

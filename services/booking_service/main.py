@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 from pydantic import BaseModel
 from typing import Any, Dict, Optional, Union
+from fastapi import Request
 
 # Import observability utilities (works both locally and in Docker)
 services_dir = Path(__file__).parent.parent
@@ -40,17 +41,22 @@ def metrics_endpoint():
 
 
 # This URL points to the other service using Docker's internal network
-FLIGHT_SERVICE_BASE_URL = os.getenv("FLIGHT_SERVICE_URL", "http://flight_service:8002")
-FLIGHT_SERVICE_URL = f"{FLIGHT_SERVICE_BASE_URL.rstrip('/')}/flights"
-
+FLIGHT_SERVICE_URL = os.getenv("FLIGHT_SERVICE_URL", "http://flight_service:8000")
 
 # Task 5: Fault Tolerance - Retry 3 times if the flight service is busy/down
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def call_flight_service(flight_id):
-    response = requests.patch(f"{FLIGHT_SERVICE_URL}/{flight_id}/reserve", timeout=5)
+def call_flight_service(flight_id, seat_count):
+    base_url = FLIGHT_SERVICE_URL.rstrip("/")
+    response = requests.patch(
+        f"{base_url}/flights/{flight_id}/reserve",
+        params={"seat_count": seat_count},
+        timeout=5
+    )
+    if response.status_code == 400:
+        return {"error": True, "detail": response.json().get("detail", "Not enough seats available for this booking.")}
     if response.status_code != 200:
         raise Exception("Flight Service Error")
-    return response
+    return response.json()
 
 
 class BookingStatusUpdate(BaseModel):
@@ -61,8 +67,15 @@ def serialize_booking(booking: Union[models.Booking, Dict[str, Any]]) -> dict:
     if isinstance(booking, dict):
         return {
             "id": booking.get("booking_id", booking.get("id")),
+            "passenger_sub": booking.get("passenger_sub"),
             "passenger_name": booking.get("passenger_name"),
             "flight_id": booking.get("flight_id"),
+            "flight_no": booking.get("flight_no"),
+            "origin": booking.get("origin"),
+            "destination": booking.get("destination"),
+            "seat_count": booking.get("seat_count"),
+            "unit_price": booking.get("unit_price"),
+            "total_amount": booking.get("total_amount"),
             "status": booking.get("status"),
         }
 
@@ -75,22 +88,71 @@ def serialize_booking(booking: Union[models.Booking, Dict[str, Any]]) -> dict:
 
 
 @app.post("/bookings")
-def create_booking(name: str, flight_id: int, db: Session = Depends(database.get_db)):
+def create_booking(name: str, flight_id: str, seat_count: int, request: Request, db: Session = Depends(database.get_db)):
+    passenger_sub = request.headers.get("x-passenger-sub")
+    if not passenger_sub:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Passenger name cannot be empty")
+
+    if seat_count <= 0:
+        raise HTTPException(status_code=400, detail="Seat count must be greater than zero")
+
     try:
         # Use our retry-enabled function
-        call_flight_service(flight_id)
+        flight_data = call_flight_service(flight_id, seat_count)
+        if "error" in flight_data:
+            raise HTTPException(status_code=400, detail=flight_data["detail"])
 
         if database.use_dynamodb():
-            booking = database.create_booking_item(name, flight_id, status="PENDING_PAYMENT")
+            total_amount = float(flight_data["price"]) * seat_count
+            booking = database.create_booking_item(
+                passenger_sub=passenger_sub,
+                passenger_name=name,
+                flight_id=flight_id,
+                flight_no=flight_data["flight_no"],
+                origin=flight_data["origin"],
+                destination=flight_data["destination"],
+                seat_count=seat_count,
+                unit_price=float(flight_data["price"]),
+                total_amount=total_amount,
+                status="PENDING_PAYMENT"
+            )
             return serialize_booking(booking)
 
-        new_booking = models.Booking(passenger_name=name, flight_id=flight_id, status="PENDING_PAYMENT")
+        new_booking = models.Booking(passenger_name=name, flight_id=int(flight_id), status="PENDING_PAYMENT")
         db.add(new_booking)
         db.commit()
         db.refresh(new_booking)
         return serialize_booking(new_booking)
-    except Exception:
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Booking failed: {e}")
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
+
+@app.get("/bookings")
+def get_all_bookings(db: Session = Depends(database.get_db)):
+    if database.use_dynamodb():
+        bookings = database.list_booking_items()
+        return {"items": [serialize_booking(b) for b in bookings]}
+    else:
+        bookings = db.query(models.Booking).all()
+        return {"items": [serialize_booking(b) for b in bookings]}
+
+@app.get("/bookings/me")
+def get_my_bookings(request: Request):
+    passenger_sub = request.headers.get("x-passenger-sub")
+    if not passenger_sub:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    if database.use_dynamodb():
+        bookings = database.list_passenger_bookings_item(passenger_sub)
+        return {"items": [serialize_booking(b) for b in bookings]}
+    else:
+        return {"items": []}
 
 
 @app.get("/bookings/{booking_id}")

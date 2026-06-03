@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Any, Optional, Union
 
 import boto3
+from boto3.dynamodb.conditions import Attr
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -70,19 +71,50 @@ def _to_dynamo_value(value: Any) -> Any:
     return value
 
 
-def create_booking_item(passenger_name: str, flight_id: int, status: str = "PENDING_PAYMENT") -> dict[str, Any]:
+def create_booking_item(
+    passenger_sub: str,
+    passenger_name: str, 
+    flight_id: str, 
+    flight_no: str,
+    origin: str,
+    destination: str,
+    seat_count: int,
+    unit_price: float,
+    total_amount: float,
+    status: str = "PENDING_PAYMENT"
+) -> dict[str, Any]:
     now = datetime.utcnow().isoformat() + "Z"
     booking = {
         "booking_id": str(uuid.uuid4()),
-        "flight_id": flight_id,
+        "passenger_sub": passenger_sub,
         "passenger_name": passenger_name,
-        "seat_count": 1,
+        "flight_id": str(flight_id),
+        "flight_no": flight_no,
+        "origin": origin,
+        "destination": destination,
+        "seat_count": seat_count,
+        "unit_price": unit_price,
+        "total_amount": total_amount,
         "status": status,
         "created_at": now,
         "updated_at": now,
     }
     booking_table().put_item(Item=_to_dynamo_value(booking))
     return _normalize_item(booking)
+
+def list_passenger_bookings_item(passenger_sub: str) -> list[dict[str, Any]]:
+    response = booking_table().scan(
+        FilterExpression=Attr("passenger_sub").eq(passenger_sub)
+    )
+    items = response.get("Items", [])
+    normalized = [_normalize_item(item) for item in items]
+    return sorted(normalized, key=lambda item: str(item.get("created_at", "")), reverse=True)
+
+def list_booking_items() -> list[dict[str, Any]]:
+    response = booking_table().scan()
+    items = response.get("Items", [])
+    normalized = [_normalize_item(item) for item in items]
+    return sorted(normalized, key=lambda item: str(item.get("created_at", "")), reverse=True)
 
 
 def get_booking_item(booking_id: str) -> Optional[dict[str, Any]]:

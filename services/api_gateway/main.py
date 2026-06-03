@@ -236,10 +236,13 @@ def clean_headers(headers: dict) -> dict:
     return {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP_HEADERS and k.lower() != "host"}
 
 
-async def proxy_request(request: Request, base_url: str, target_path: str) -> Response:
+async def proxy_request(request: Request, base_url: str, target_path: str, extra_headers: dict = None) -> Response:
     """Forward the incoming request to an internal service and return its response."""
     body = await request.body()
     headers = clean_headers(dict(request.headers))
+    headers.pop("x-passenger-sub", None)
+    if extra_headers:
+        headers.update(extra_headers)
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         upstream_response = await client.request(
@@ -287,21 +290,31 @@ async def flight_proxy(request: Request, path: str = ""):
 
 
 # ── BOOKING ROUTES ───────────────────────────────────────────────────────────
-@app.api_route("/api/bookings", methods=["GET", "POST"])
+@app.api_route("/api/bookings", methods=["GET", "POST", "PATCH", "DELETE"])
+@app.api_route("/api/bookings/", methods=["GET", "POST", "PATCH", "DELETE"])
 @app.api_route("/api/bookings/{path:path}", methods=["GET", "POST", "PATCH", "DELETE"])
 async def booking_proxy(request: Request, path: str = ""):
     user = await verify_user(request)
 
-    # Passengers can create and view bookings. Staff can only view bookings.
+    extra_headers = {}
+    if user and user.get("sub"):
+        extra_headers["x-passenger-sub"] = user.get("sub")
+
+    # Passengers can create bookings and view their own. Staff can view all and manage statuses.
     if request.method == "GET":
-        require_groups(user, [PASSENGER_GROUP, STAFF_GROUP])
+        if path == "me":
+            require_groups(user, [PASSENGER_GROUP])
+        elif path == "":
+            require_groups(user, [STAFF_GROUP])
+        else:
+            require_groups(user, [PASSENGER_GROUP, STAFF_GROUP])
     elif request.method == "POST":
         require_groups(user, [PASSENGER_GROUP])
     elif request.method in ["PATCH", "DELETE"]:
         require_groups(user, [STAFF_GROUP])
 
     target_path = "/bookings" + (f"/{path}" if path else "")
-    return await proxy_request(request, BOOKING_SERVICE_URL, target_path)
+    return await proxy_request(request, BOOKING_SERVICE_URL, target_path, extra_headers=extra_headers)
 
 
 # ── BAGGAGE ROUTES ───────────────────────────────────────────────────────────
