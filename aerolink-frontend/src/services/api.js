@@ -83,11 +83,26 @@ export const createBooking = (name, flight_id, seat_count) =>
 
 // ── Baggage ───────────────────────────────────────────────────────────────────
 
-export const getBaggage = () => requestJson("/api/baggage");
+export const getMyBaggage = () => requestJson("/api/baggage/me");
+
+export const getAllBaggage = () => requestJson("/api/baggage");
+
+export const createBaggage = (bookingId, tagNumber, weightKg) => {
+  const parsedWeight = parseFloat(weightKg);
+  return requestJson("/api/baggage", {
+    method: "POST",
+    body: JSON.stringify({
+      booking_id: bookingId,
+      tag_number: tagNumber,
+      weight_kg: isNaN(parsedWeight) ? null : parsedWeight
+    }),
+  });
+};
 
 export const updateBaggageStatus = (baggageId, status) =>
-  requestJson(`/api/baggage/${encodeURIComponent(baggageId)}/status?new_status=${encodeURIComponent(status)}`, {
-    method: "PATCH"
+  requestJson(`/api/baggage/${encodeURIComponent(baggageId)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
   });
 
 // ── Payments ──────────────────────────────────────────────────────────────────

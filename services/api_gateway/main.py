@@ -315,20 +315,24 @@ async def booking_proxy(request: Request, path: str = ""):
     return await proxy_request(request, BOOKING_SERVICE_URL, target_path, extra_headers=extra_headers)
 
 
-# ── BAGGAGE ROUTES ───────────────────────────────────────────────────────────
+# ── BAGGAGE ROUTES ────────────────────────────────────────────────────────────
 @app.api_route("/api/baggage", methods=["GET", "POST"])
 @app.api_route("/api/baggage/{path:path}", methods=["GET", "POST", "PATCH", "PUT", "DELETE"])
 async def baggage_proxy(request: Request, path: str = ""):
     user = await verify_user(request)
+    extra_headers = {}
 
-    # Passengers can view baggage. Staff can create and update baggage.
-    if request.method == "GET":
-        require_groups(user, [PASSENGER_GROUP, STAFF_GROUP])
+    if request.method == "GET" and path == "me":
+        require_groups(user, [PASSENGER_GROUP])
+        if user.get("sub"):
+            extra_headers["x-passenger-sub"] = user["sub"]
+    elif request.method == "GET":
+        require_groups(user, [STAFF_GROUP])
     elif request.method in ["POST", "PATCH", "PUT", "DELETE"]:
         require_groups(user, [STAFF_GROUP])
 
     target_path = "/baggage" + (f"/{path}" if path else "")
-    return await proxy_request(request, BAGGAGE_SERVICE_URL, target_path)
+    return await proxy_request(request, BAGGAGE_SERVICE_URL, target_path, extra_headers=extra_headers)
 
 
 # ── SCHEDULE ROUTES ──────────────────────────────────────────────────────────

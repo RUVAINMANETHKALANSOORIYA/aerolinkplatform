@@ -106,10 +106,13 @@ services:
     expose:
       - "8000"            # Internal only; access through API Gateway
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      BAGGAGE_STORAGE_BACKEND: dynamodb
+      BAGGAGE_TABLE_NAME: AeroLinkBaggage
+      BAGGAGE_PASSENGER_INDEX: passenger_sub-updated_at-index
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BOOKING_SERVICE_URL: http://booking_service:8000
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - booking_service
 
   # ── SCHEDULE SERVICE ───────────────────────────────────────────────────────
   schedule_service:
