@@ -6,6 +6,7 @@ import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import StatCard from "../components/StatCard.jsx";
+import SeatSelector from "../components/SeatSelector.jsx";
 
 export default function BookingsPage() {
   const isPassenger = localStorage.getItem("role") === "passenger";
@@ -20,7 +21,7 @@ export default function BookingsPage() {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedFlight, setSelectedFlight] = useState(location.state?.selectedFlight || null);
-  const [seatCount, setSeatCount] = useState("1");
+  const [selectedSeats, setSelectedSeats] = useState([]);
   const [passengerName, setPassengerName] = useState(username);
   
   const [payingBooking, setPayingBooking] = useState(null);
@@ -64,13 +65,14 @@ export default function BookingsPage() {
 
   const handleCreateBooking = async (e) => {
     e.preventDefault();
-    if (!selectedFlight || !seatCount || !passengerName) return;
+    if (!selectedFlight || selectedSeats.length === 0 || !passengerName) return;
 
     setCreating(true);
     setError("");
     try {
-      await createBooking(passengerName, selectedFlight.flight_id, parseInt(seatCount, 10));
+      await createBooking(passengerName, selectedFlight.flight_id, selectedSeats.length);
       setSelectedFlight(null); // Reset after booking
+      setSelectedSeats([]);
       loadBookings();
     } catch (err) {
       setError(err.message || "Failed to create booking");
@@ -317,75 +319,134 @@ export default function BookingsPage() {
       )}
 
       {isPassenger && !payingBooking && (
-        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-6">
-          <h3 className="text-base font-semibold leading-6 text-slate-900 mb-4">Make a Booking</h3>
-          {!selectedFlight ? (
-            <div className="text-sm text-slate-500 mb-4">
-              Please select a flight from the <a href="/flights" className="text-blue-600 hover:underline">Available Flights</a> page to make a booking.
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
+          <div className="bg-slate-900 px-6 py-4 flex flex-col sm:flex-row justify-between sm:items-center">
+            <div>
+              <h3 className="text-lg font-bold text-white">Select Your Seats</h3>
+              {selectedFlight ? (
+                <p className="text-sky-200 text-sm mt-0.5">
+                  Flight {selectedFlight.flight_no} — {selectedFlight.origin} → {selectedFlight.destination}
+                </p>
+              ) : (
+                <p className="text-sky-200 text-sm mt-0.5">Please select a flight to begin</p>
+              )}
             </div>
-          ) : (
-            <form onSubmit={handleCreateBooking} className="flex flex-col gap-4">
-              <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-semibold text-slate-900">{selectedFlight.flight_no}</h4>
-                  <span className="text-sm font-medium text-slate-700">${selectedFlight.price} / seat</span>
-                </div>
-                <div className="text-sm text-slate-600 mb-1">{selectedFlight.origin} → {selectedFlight.destination}</div>
-                <div className="text-xs text-slate-500">{selectedFlight.available_seats} seats available</div>
+            {selectedFlight && (
+              <div className="mt-2 sm:mt-0 px-3 py-1 bg-sky-900/50 rounded-full border border-sky-700/50 text-sky-100 text-xs font-medium">
+                Capacity: {selectedFlight.available_seats} seats available
               </div>
-              
-              <div className="flex gap-4 flex-wrap items-end">
-                <div className="flex-1 min-w-[200px]">
-                  <label htmlFor="passengerName" className="block text-sm font-medium leading-6 text-slate-700">Passenger Name</label>
-                  <input
-                    type="text"
-                    id="passengerName"
-                    required
-                    value={passengerName}
-                    onChange={(e) => setPassengerName(e.target.value)}
-                    className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm"
-                  />
-                </div>
-                <div className="w-24">
-                  <label htmlFor="seatCount" className="block text-sm font-medium leading-6 text-slate-700">Seats</label>
-                  <input
-                    type="number"
-                    id="seatCount"
-                    required
-                    min="1"
-                    max={selectedFlight.available_seats}
-                    value={seatCount}
-                    onChange={(e) => setSeatCount(e.target.value)}
-                    className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm"
-                  />
-                </div>
-              </div>
-              
-              <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-900 flex justify-between items-center border border-blue-100">
-                <span>Estimated Total:</span>
-                <span className="font-bold text-lg">${(parseFloat(selectedFlight.price || 0) * parseInt(seatCount || 0, 10)).toFixed(2)}</span>
-              </div>
-              <p className="text-xs text-slate-500 italic">Final amount is confirmed when the booking is created.</p>
+            )}
+          </div>
 
-              <div className="flex gap-3 justify-end mt-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedFlight(null)}
-                  className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || !seatCount || !passengerName}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-70"
-                >
-                  {creating ? <LoadingSpinner size="sm" label="" /> : <Plus className="h-4 w-4" />}
-                  Confirm Booking
-                </button>
+          <div className="p-6">
+            {!selectedFlight ? (
+              <div className="text-sm text-slate-500 py-8 text-center">
+                Please select a flight from the <a href="/flights" className="text-sky-600 hover:underline font-semibold">Available Flights</a> page to make a booking.
               </div>
-            </form>
-          )}
+            ) : (
+              <form onSubmit={handleCreateBooking} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                {/* Seat Map - 7 cols on lg screens */}
+                <div className="lg:col-span-7 xl:col-span-8 flex justify-center bg-slate-50 rounded-xl p-4 sm:p-8 border border-slate-100">
+                  <SeatSelector
+                    selectedSeats={selectedSeats}
+                    onChange={setSelectedSeats}
+                    availableSeats={selectedFlight.available_seats}
+                    maxSelectableSeats={10}
+                  />
+                </div>
+                
+                {/* Booking Summary - 5 cols on lg screens */}
+                <div className="lg:col-span-5 xl:col-span-4 flex flex-col">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 font-semibold text-slate-800 flex justify-between items-center">
+                      Booking Summary
+                      <Ticket className="h-4 w-4 text-sky-600" />
+                    </div>
+                    
+                    <div className="p-5 flex-1 space-y-6">
+                      <div>
+                        <label htmlFor="passengerName" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                          Passenger Name
+                        </label>
+                        <input
+                          type="text"
+                          id="passengerName"
+                          required
+                          value={passengerName}
+                          onChange={(e) => setPassengerName(e.target.value)}
+                          className="block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-sky-600 sm:text-sm font-medium"
+                        />
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-4">
+                        <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                          Selected Seats
+                        </span>
+                        {selectedSeats.length === 0 ? (
+                          <span className="text-sm text-slate-400 italic">No seats selected</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedSeats.sort().map(s => (
+                              <span key={s} className="px-2 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-md border border-emerald-200">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-sm font-medium text-slate-700 mt-2">
+                          {selectedSeats.length} {selectedSeats.length === 1 ? 'seat' : 'seats'} selected
+                        </p>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-4">
+                        <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                          Ticket Price
+                        </span>
+                        <p className="text-sm font-medium text-slate-700">
+                          ${parseFloat(selectedFlight.price || 0).toFixed(2)} per seat
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 border-t border-slate-200">
+                      <div className="flex justify-between items-end mb-4">
+                        <span className="text-sm font-bold text-slate-700">Total Amount</span>
+                        <span className="text-2xl font-extrabold text-sky-700">
+                          ${(parseFloat(selectedFlight.price || 0) * selectedSeats.length).toFixed(2)}
+                        </span>
+                      </div>
+                      
+                      <div className="rounded-md bg-blue-50 p-3 mb-4 text-xs text-blue-700 border border-blue-100">
+                        <AlertTriangle className="h-4 w-4 inline mr-1 -mt-0.5" />
+                        Selected seats represent booking preferences. The system currently reserves passenger capacity based on the number of selected seats.
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFlight(null);
+                            setSelectedSeats([]);
+                          }}
+                          className="flex-1 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={creating || selectedSeats.length === 0 || !passengerName}
+                          className="flex-[2] inline-flex justify-center items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {creating ? <LoadingSpinner size="sm" label="" /> : "Confirm Booking"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 
