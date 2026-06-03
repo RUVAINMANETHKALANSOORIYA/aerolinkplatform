@@ -1,16 +1,19 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
-import { Ticket, Plus } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Ticket, Plus, CheckCircle2, Clock, AlertTriangle, Search, Filter, Copy, Check } from "lucide-react";
 import { getBookings, createBooking, createPayment } from "../services/api.js";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import StatCard from "../components/StatCard.jsx";
 
 export default function BookingsPage() {
   const isPassenger = localStorage.getItem("role") === "passenger";
+  const isStaff = localStorage.getItem("role") === "staff";
   const username = localStorage.getItem("username") || "Passenger";
   
   const location = useLocation();
+  const navigate = useNavigate();
   
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +25,11 @@ export default function BookingsPage() {
   
   const [payingBooking, setPayingBooking] = useState(null);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  // Staff filters & UI state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [copiedId, setCopiedId] = useState(null);
 
   const handlePayment = async (result) => {
     setPaymentProcessing(true);
@@ -52,7 +60,7 @@ export default function BookingsPage() {
 
   useEffect(() => {
     loadBookings();
-  }, []);
+  }, [isPassenger]);
 
   const handleCreateBooking = async (e) => {
     e.preventDefault();
@@ -71,6 +79,198 @@ export default function BookingsPage() {
     }
   };
 
+  const handleCopyId = (id) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleRegisterBaggage = (booking) => {
+    navigate("/dashboard/baggage", {
+      state: {
+        bookingForBaggage: {
+          id: booking.id,
+          flight_no: booking.flight_no,
+          origin: booking.origin,
+          destination: booking.destination,
+          passenger_name: booking.passenger_name
+        }
+      }
+    });
+  };
+
+  const filteredBookings = useMemo(() => {
+    if (!isStaff) return bookings;
+    return bookings.filter(b => {
+      const matchSearch = 
+        (b.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.passenger_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.flight_no || "").toLowerCase().includes(searchTerm.toLowerCase());
+      const matchStatus = statusFilter === "ALL" || b.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [bookings, searchTerm, statusFilter, isStaff]);
+
+  const stats = useMemo(() => {
+    if (!isStaff) return null;
+    return {
+      total: bookings.length,
+      confirmed: bookings.filter(b => b.status === "CONFIRMED").length,
+      pending: bookings.filter(b => b.status === "PENDING_PAYMENT").length,
+      failed: bookings.filter(b => b.status === "PAYMENT_FAILED").length,
+    };
+  }, [bookings, isStaff]);
+
+  // ── STAFF VIEW ─────────────────────────────────────────────────────────────
+  if (isStaff) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Passenger Bookings</h1>
+            <p className="mt-1 text-sm text-slate-500">Review passenger reservations and register baggage for confirmed journeys.</p>
+          </div>
+          <button 
+            onClick={loadBookings}
+            className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 self-start sm:self-auto"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {error && (
+          <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 border border-red-100 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {stats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard title="Total Bookings" value={stats.total} icon={Ticket} colorClass="text-slate-600" bgClass="bg-slate-100" />
+            <StatCard title="Confirmed" value={stats.confirmed} icon={CheckCircle2} colorClass="text-emerald-600" bgClass="bg-emerald-50" />
+            <StatCard title="Pending Payment" value={stats.pending} icon={Clock} colorClass="text-amber-600" bgClass="bg-amber-50" />
+            <StatCard title="Payment Failed" value={stats.failed} icon={AlertTriangle} colorClass="text-red-600" bgClass="bg-red-50" />
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm ring-1 ring-slate-200">
+          <div className="relative flex-1">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <Search className="h-4 w-4 text-slate-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search booking ID, passenger name or flight number"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="block w-full rounded-md border-0 py-2 pl-10 pr-3 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6"
+            />
+          </div>
+          <div className="relative w-full sm:w-64 flex-shrink-0">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <Filter className="h-4 w-4 text-slate-400" />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="block w-full rounded-md border-0 py-2 pl-10 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="PENDING_PAYMENT">Pending Payment</option>
+              <option value="PAYMENT_FAILED">Payment Failed</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
+          {loading ? (
+            <div className="p-12 flex justify-center">
+              <LoadingSpinner label="Loading bookings..." />
+            </div>
+          ) : filteredBookings.length === 0 ? (
+            <EmptyState 
+              icon={Ticket} 
+              title="No bookings found" 
+              description="Adjust your search filters or wait for new reservations." 
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">Booking ID</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Passenger Name</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Flight</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Route</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Seats</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Total Amount</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Status</th>
+                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {filteredBookings.map((booking) => (
+                    <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs">{booking.id}</span>
+                          <button
+                            onClick={() => handleCopyId(booking.id)}
+                            className="text-slate-400 hover:text-slate-600 focus:outline-none"
+                            title="Copy ID"
+                          >
+                            {copiedId === booking.id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-900 font-medium">
+                        {booking.passenger_name || "-"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-600 font-semibold">
+                        {booking.flight_no}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-500 text-xs">
+                        {booking.origin && booking.destination ? `${booking.origin} → ${booking.destination}` : "-"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-600">
+                        {booking.seat_count || 1}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-slate-900">
+                        {booking.total_amount != null ? `$${Number(booking.total_amount || 0).toFixed(2)}` : "-"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm">
+                        <StatusBadge status={booking.status} />
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm font-medium">
+                        {booking.status === "CONFIRMED" ? (
+                          <button 
+                            onClick={() => handleRegisterBaggage(booking)}
+                            className="text-sky-600 hover:text-sky-800 font-semibold"
+                          >
+                            Register Baggage
+                          </button>
+                        ) : booking.status === "PENDING_PAYMENT" ? (
+                          <span className="text-slate-400">Awaiting Payment</span>
+                        ) : booking.status === "PAYMENT_FAILED" ? (
+                          <span className="text-slate-400">Payment Failed</span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── PASSENGER VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

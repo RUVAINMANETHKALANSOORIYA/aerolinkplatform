@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { 
   Luggage, Plus, Search, Filter, AlertCircle, CheckCircle2, 
   Clock, Package, PlaneTakeoff, ShieldCheck, MapPin, 
@@ -16,6 +16,8 @@ const TIMELINE_STEPS = ["CHECKED_IN", "SCREENED", "LOADED", "IN_TRANSIT", "ARRIV
 
 export default function BaggagePage() {
   const isStaff = localStorage.getItem("role") === "staff";
+  const location = useLocation();
+  const navigate = useNavigate();
   
   const [bags, setBags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,7 @@ export default function BaggagePage() {
   const [regBookingId, setRegBookingId] = useState("");
   const [regTagNumber, setRegTagNumber] = useState("");
   const [regWeight, setRegWeight] = useState("");
+  const [selectedBookingDetails, setSelectedBookingDetails] = useState(null);
 
   const [updating, setUpdating] = useState(false);
   const [updateStatus, setUpdateStatus] = useState("CHECKED_IN");
@@ -56,6 +59,17 @@ export default function BaggagePage() {
     loadBaggage();
   }, [isStaff]);
 
+  useEffect(() => {
+    if (isStaff && location.state?.bookingForBaggage) {
+      const booking = location.state.bookingForBaggage;
+      setRegBookingId(booking.id);
+      setSelectedBookingDetails(booking);
+      setIsRegModalOpen(true);
+      // Clear location state so refresh doesn't reopen modal
+      window.history.replaceState({}, document.title);
+    }
+  }, [isStaff, location.state]);
+
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!regBookingId || !regTagNumber) return;
@@ -69,6 +83,7 @@ export default function BaggagePage() {
       setRegBookingId("");
       setRegTagNumber("");
       setRegWeight("");
+      setSelectedBookingDetails(null);
       loadBaggage();
     } catch (err) {
       setError(err.message || "Failed to register baggage");
@@ -422,13 +437,48 @@ export default function BaggagePage() {
       {/* Registration Modal */}
       <Modal 
         isOpen={isRegModalOpen} 
-        onClose={() => !creating && setIsRegModalOpen(false)} 
+        onClose={() => {
+          if (!creating) {
+            setIsRegModalOpen(false);
+            setSelectedBookingDetails(null);
+          }
+        }} 
         title="Register Baggage"
       >
         <form onSubmit={handleRegister} className="space-y-4">
-          <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-700 border border-blue-100">
-            Baggage can be registered only for a confirmed booking.
-          </div>
+          {selectedBookingDetails ? (
+            <div className="rounded-md bg-emerald-50 p-4 border border-emerald-100 mb-4">
+              <h4 className="text-sm font-semibold text-emerald-900 mb-2 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" /> Confirmed booking selected
+              </h4>
+              <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm text-emerald-800">
+                <div>
+                  <span className="block text-xs font-semibold uppercase opacity-70">Passenger</span>
+                  <span>{selectedBookingDetails.passenger_name || "-"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase opacity-70">Flight</span>
+                  <span>{selectedBookingDetails.flight_no}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="block text-xs font-semibold uppercase opacity-70">Route</span>
+                  <span>{selectedBookingDetails.origin} → {selectedBookingDetails.destination}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-700 border border-blue-100 flex justify-between items-center">
+              <span>Baggage can be registered only for a confirmed booking.</span>
+              <button 
+                type="button" 
+                onClick={() => navigate("/dashboard/bookings")}
+                className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs whitespace-nowrap ml-2"
+              >
+                Select from Bookings
+              </button>
+            </div>
+          )}
+          
           <div>
             <label className="block text-sm font-medium leading-6 text-slate-900">Booking ID</label>
             <input
@@ -437,7 +487,7 @@ export default function BaggagePage() {
               value={regBookingId}
               onChange={(e) => setRegBookingId(e.target.value)}
               placeholder="e.g. uuid-..."
-              className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6"
+              className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6 font-mono text-xs"
             />
           </div>
           <div>
@@ -478,6 +528,18 @@ export default function BaggagePage() {
               {creating ? <LoadingSpinner size="sm" label="" /> : "Register"}
             </button>
           </div>
+          
+          {selectedBookingDetails && (
+            <div className="pt-2 border-t border-slate-100 mt-2">
+               <button 
+                type="button" 
+                onClick={() => navigate("/dashboard/bookings")}
+                className="text-sky-600 hover:text-sky-800 font-semibold text-xs"
+              >
+                ← Select a different Passenger Booking
+              </button>
+            </div>
+          )}
         </form>
       </Modal>
 
