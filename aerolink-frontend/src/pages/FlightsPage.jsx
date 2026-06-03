@@ -26,7 +26,18 @@ export default function FlightsPage() {
     setError("");
     try {
       const data = await getFlights();
-      setFlights(data.items || []);
+      const rawFlights = Array.isArray(data) ? data : (data.items || []);
+      const normalizedFlights = rawFlights.map((flight) => ({
+        ...flight,
+        flight_id: flight.flight_id || flight.id,
+        flight_no: flight.flight_no || flight.flight_number,
+        origin: flight.origin,
+        destination: flight.destination,
+        price: Number(flight.price || 0),
+        available_seats: Number(flight.available_seats || 0),
+        total_seats: Number(flight.total_seats || flight.available_seats || 0)
+      }));
+      setFlights(normalizedFlights);
     } catch (err) {
       setError(err.message || "Failed to load flights");
     } finally {
@@ -50,7 +61,7 @@ export default function FlightsPage() {
     setSuccessMsg("");
     try {
       const data = await createFlight(newFlightNo, newOrigin, newDestination, parseFloat(newPrice), parseInt(newSeats, 10));
-      setSuccessMsg(`Flight ${data.flight_number} created successfully.`);
+      setSuccessMsg(`Flight ${data.flight_no || data.flight_number} created successfully.`);
       setNewFlightNo("");
       setNewOrigin("");
       setNewDestination("");
@@ -220,9 +231,9 @@ export default function FlightsPage() {
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {flights.map((flight) => (
-                  <tr key={flight.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={flight.flight_id} className="hover:bg-slate-50 transition-colors">
                     <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 sm:pl-6">
-                      {flight.flight_number}
+                      {flight.flight_no}
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
                       {flight.origin} → {flight.destination}
@@ -231,7 +242,7 @@ export default function FlightsPage() {
                       {flight.available_seats}
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-400 font-mono text-xs">
-                      {flight.id}
+                      {flight.flight_id}
                     </td>
                     {isPassenger && (
                       <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
@@ -239,7 +250,7 @@ export default function FlightsPage() {
                           onClick={() => handleBookFlight(flight)}
                           className="text-blue-600 hover:text-blue-900 font-semibold"
                         >
-                          Book<span className="sr-only">, {flight.flight_number}</span>
+                          Book<span className="sr-only">, {flight.flight_no}</span>
                         </button>
                       </td>
                     )}

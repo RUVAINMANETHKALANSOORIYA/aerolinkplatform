@@ -44,7 +44,7 @@ export default function BookingsPage() {
     setCreating(true);
     setError("");
     try {
-      await createBooking(passengerName, selectedFlight.id, parseInt(seatCount, 10));
+      await createBooking(passengerName, selectedFlight.flight_id, parseInt(seatCount, 10));
       setSelectedFlight(null); // Reset after booking
       loadBookings();
     } catch (err) {
@@ -86,7 +86,7 @@ export default function BookingsPage() {
             <form onSubmit={handleCreateBooking} className="flex flex-col gap-4">
               <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
                 <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-semibold text-slate-900">{selectedFlight.flight_number}</h4>
+                  <h4 className="font-semibold text-slate-900">{selectedFlight.flight_no}</h4>
                   <span className="text-sm font-medium text-slate-700">${selectedFlight.price} / seat</span>
                 </div>
                 <div className="text-sm text-slate-600 mb-1">{selectedFlight.origin} → {selectedFlight.destination}</div>
