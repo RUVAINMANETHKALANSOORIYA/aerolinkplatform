@@ -48,6 +48,7 @@ def publish_payment_event(
     booking_status: str,
     transaction_reference: str,
     created_at: str,
+    passenger_sub: str,
 ) -> None:
     """Publish a safe EventBridge event after payment and booking update.
 
@@ -68,6 +69,7 @@ def publish_payment_event(
         "booking_status": booking_status,
         "transaction_reference": transaction_reference,
         "created_at": str(created_at),
+        "passenger_sub": passenger_sub,
     }
 
     try:
@@ -267,6 +269,7 @@ def create_payment(payment: PaymentCreate, request: Request, db: Session = Depen
             booking_status="CONFIRMED",
             transaction_reference=transaction_reference,
             created_at=new_payment["created_at"] if isinstance(new_payment, dict) else str(new_payment.created_at),
+            passenger_sub=passenger_sub,
         )
     elif payment_status == "FAILED":
         update_booking_status(payment.booking_id, "PAYMENT_FAILED")
@@ -278,6 +281,7 @@ def create_payment(payment: PaymentCreate, request: Request, db: Session = Depen
             booking_status="PAYMENT_FAILED",
             transaction_reference=transaction_reference,
             created_at=new_payment["created_at"] if isinstance(new_payment, dict) else str(new_payment.created_at),
+            passenger_sub=passenger_sub,
         )
 
     return serialize_payment(new_payment)

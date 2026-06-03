@@ -192,3 +192,25 @@ def update_booking_status(booking_id: str, payload: BookingStatusUpdate, db: Ses
     db.commit()
     db.refresh(booking)
     return serialize_booking(booking)
+
+
+@app.get("/notifications/me")
+def get_my_notifications(request: Request):
+    passenger_sub = request.headers.get("x-passenger-sub")
+    if not passenger_sub:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    if database.use_dynamodb():
+        notifications = database.list_notification_items_for_passenger(passenger_sub)
+        safe_items = []
+        for n in notifications:
+            safe_items.append({
+                "title": n.get("title"),
+                "message": n.get("message"),
+                "notification_status": n.get("notification_status"),
+                "created_at": n.get("created_at"),
+                "event_type": n.get("event_type"),
+            })
+        return {"items": safe_items}
+    else:
+        return {"items": []}

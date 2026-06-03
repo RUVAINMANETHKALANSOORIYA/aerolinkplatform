@@ -91,12 +91,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> None:
     # Extract only the safe, non-sensitive identifiers from the detail.
     booking_id = str(detail.get("booking_id", ""))
     payment_id = str(detail.get("payment_id", ""))
+    passenger_sub = detail.get("passenger_sub")
+
+    if not passenger_sub:
+        logger.warning("Event missing passenger_sub. Cannot securely route notification. Skipping.")
+        return
 
     notification_id = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     item = {
         "notification_id": notification_id,
+        "passenger_sub": passenger_sub,
         "booking_id": booking_id,
         "payment_id": payment_id,
         "event_type": detail_type,

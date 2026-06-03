@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import Any, Optional, Union
 
 import boto3
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -14,6 +14,8 @@ from sqlalchemy.orm import sessionmaker
 SQLALCHEMY_DATABASE_URL = os.getenv("BOOKING_DATABASE_URL", "sqlite:///./bookings.db")
 BOOKING_STORAGE_BACKEND = os.getenv("BOOKING_STORAGE_BACKEND", "sqlite").strip().lower()
 BOOKING_TABLE_NAME = os.getenv("BOOKING_TABLE_NAME", "AeroLinkBookings")
+NOTIFICATION_TABLE_NAME = os.getenv("NOTIFICATION_TABLE_NAME", "AeroLinkNotifications")
+NOTIFICATION_PASSENGER_INDEX = os.getenv("NOTIFICATION_PASSENGER_INDEX", "passenger_sub-created_at-index")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -115,6 +117,17 @@ def list_booking_items() -> list[dict[str, Any]]:
     items = response.get("Items", [])
     normalized = [_normalize_item(item) for item in items]
     return sorted(normalized, key=lambda item: str(item.get("created_at", "")), reverse=True)
+
+
+def list_notification_items_for_passenger(passenger_sub: str) -> list[dict[str, Any]]:
+    table = get_dynamodb_resource().Table(NOTIFICATION_TABLE_NAME)
+    response = table.query(
+        IndexName=NOTIFICATION_PASSENGER_INDEX,
+        KeyConditionExpression=Key("passenger_sub").eq(passenger_sub),
+        ScanIndexForward=False
+    )
+    items = response.get("Items", [])
+    return [_normalize_item(item) for item in items]
 
 
 def get_booking_item(booking_id: str) -> Optional[dict[str, Any]]:

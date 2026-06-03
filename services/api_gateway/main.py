@@ -364,3 +364,18 @@ async def payment_proxy(request: Request, path: str = ""):
 
     target_path = "/payments" + (f"/{path}" if path else "")
     return await proxy_request(request, PAYMENT_SERVICE_URL, target_path, extra_headers=extra_headers)
+
+
+# ── NOTIFICATION ROUTES ───────────────────────────────────────────────────────
+@app.api_route("/api/notifications/me", methods=["GET"])
+async def notification_proxy(request: Request):
+    user = await verify_user(request)
+
+    extra_headers = {}
+    if user and user.get("sub"):
+        extra_headers["x-passenger-sub"] = user.get("sub")
+
+    require_groups(user, [PASSENGER_GROUP])
+
+    return await proxy_request(request, BOOKING_SERVICE_URL, "/notifications/me", extra_headers=extra_headers)
+

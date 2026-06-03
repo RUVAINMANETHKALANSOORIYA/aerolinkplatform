@@ -101,5 +101,11 @@ export const createPayment = (bookingId, result) =>
     })
   });
 
-// NOTE: /api/notifications is not yet deployed. Do not call it from the frontend.
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export const getMyNotifications = () =>
+  requestJson("/api/notifications/me", {
+    method: "GET"
+  });
+
 
