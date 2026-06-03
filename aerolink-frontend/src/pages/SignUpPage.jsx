@@ -1,26 +1,26 @@
 import { useState } from "react";
-import { useNavigate, Navigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Plane, AlertCircle } from "lucide-react";
-import { cognitoLogin, getStoredAccessToken } from "../auth.js";
+import { cognitoSignUpPassenger } from "../auth.js";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import AuthLayout from "../components/AuthLayout.jsx";
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // If already logged in, redirect to dashboard
-  if (getStoredAccessToken()) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  const handleLogin = async (e) => {
+  const handleSignUp = async (e) => {
     e.preventDefault();
-    if (!username || !password) {
-      setError("Please enter both username and password.");
+    if (!email || !password || !confirmPassword) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
 
@@ -28,24 +28,28 @@ export default function LoginPage() {
     setError("");
 
     try {
-      await cognitoLogin(username, password);
-      navigate("/dashboard");
+      const result = await cognitoSignUpPassenger(email, password);
+      if (result.userConfirmed) {
+        setError("This account is already confirmed. Please sign in.");
+      } else {
+        navigate("/verify-email", { state: { email: email.trim().toLowerCase() } });
+      }
     } catch (err) {
-      setError(err.message || "Login failed. Please check your credentials.");
+      setError(err.message || "Sign up failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthLayout>
+    <AuthLayout heroTitle="Begin your journey" heroSubtitle="Create your passenger account to book flights and track your travel updates.">
       <div className="text-center">
         <div className="mx-auto h-14 w-14 bg-sky-50 rounded-2xl flex items-center justify-center mb-6 lg:hidden ring-1 ring-inset ring-sky-100">
           <Plane className="h-7 w-7 text-sky-600" />
         </div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Welcome back</h2>
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Create passenger account</h2>
         <p className="mt-2 text-sm text-slate-500 font-medium">
-          Sign in to continue your AeroLink journey.
+          Register securely to manage your AeroLink journeys.
         </p>
       </div>
 
@@ -56,21 +60,21 @@ export default function LoginPage() {
         </div>
       )}
 
-      <form onSubmit={handleLogin} className="space-y-6 mt-8">
+      <form onSubmit={handleSignUp} className="space-y-6 mt-8">
         <div>
-          <label htmlFor="username" className="block text-sm font-semibold leading-6 text-slate-900">
-            Username
+          <label htmlFor="email" className="block text-sm font-semibold leading-6 text-slate-900">
+            Email Address
           </label>
           <div className="mt-2">
             <input
-              id="username"
-              name="username"
-              type="text"
+              id="email"
+              name="email"
+              type="email"
               required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="block w-full rounded-lg border-0 py-3 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6 transition-shadow"
-              placeholder="Enter your username"
+              placeholder="you@example.com"
             />
           </div>
         </div>
@@ -93,18 +97,36 @@ export default function LoginPage() {
           </div>
         </div>
 
+        <div>
+          <label htmlFor="confirmPassword" className="block text-sm font-semibold leading-6 text-slate-900">
+            Confirm Password
+          </label>
+          <div className="mt-2">
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="block w-full rounded-lg border-0 py-3 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6 transition-shadow"
+              placeholder="••••••••"
+            />
+          </div>
+        </div>
+
         <button
           type="submit"
           disabled={loading}
           className="flex w-full justify-center items-center gap-2 rounded-lg bg-sky-600 px-4 py-3.5 text-sm font-bold text-white shadow-md hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:opacity-70 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
         >
-          {loading ? <LoadingSpinner size="sm" label="" /> : "Sign In"}
+          {loading ? <LoadingSpinner size="sm" label="" /> : "Create Account"}
         </button>
       </form>
       
       <div className="mt-6 text-center">
-        <Link to="/signup" className="text-sm font-semibold text-sky-600 hover:text-sky-500 transition-colors">
-          New to AeroLink? Create a passenger account
+        <Link to="/login" className="text-sm font-semibold text-sky-600 hover:text-sky-500 transition-colors">
+          Already have an account? Sign in
         </Link>
       </div>
     </AuthLayout>

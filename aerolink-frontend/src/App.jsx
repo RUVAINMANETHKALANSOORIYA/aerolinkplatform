@@ -12,6 +12,8 @@ import BookingsPage from "./pages/BookingsPage.jsx";
 import BaggagePage from "./pages/BaggagePage.jsx";
 import HealthPage from "./pages/HealthPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
+import SignUpPage from "./pages/SignUpPage.jsx";
+import VerifyEmailPage from "./pages/VerifyEmailPage.jsx";
 
 // ── Role-based Dashboard Router ──────────────────────────────────────────────
 // Small wrapper that redirects to the correct dashboard based on stored role
@@ -27,8 +29,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public login route */}
+        {/* Public login and signup routes */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         
         {/* Protected routes */}
         <Route element={<ProtectedRoute />}>

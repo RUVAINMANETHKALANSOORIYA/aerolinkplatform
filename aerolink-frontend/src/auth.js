@@ -10,6 +10,9 @@
  *   cognitoLogin(username, password)  → Promise<{ accessToken, username, groups }>
  *   cognitoLogout()                   → void  (clears localStorage)
  *   getStoredAccessToken()            → string | null
+ *   cognitoSignUpPassenger(email, password) → Promise<{ username, userConfirmed }>
+ *   cognitoConfirmPassengerSignUp(email, verificationCode) → Promise<any>
+ *   cognitoResendPassengerCode(email) → Promise<any>
  */
 
 import {
@@ -148,4 +151,72 @@ export function getStoredAccessToken() {
   } catch {
     return null;
   }
+}
+
+// ── Passenger Registration ────────────────────────────────────────────────────
+
+export function cognitoSignUpPassenger(email, password) {
+  return new Promise((resolve, reject) => {
+    const pool = getUserPool();
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // Empty attribute list because email is the username and Cognito AutoVerifies
+    pool.signUp(cleanEmail, password, [], null, (err, result) => {
+      if (err) {
+        let message = err.message || "Failed to create account.";
+        if (err.code === "UsernameExistsException") {
+          message = "An account already exists for this email. Sign in or verify your account.";
+        } else if (err.code === "InvalidParameterException" && message.includes("password")) {
+          // Keep Cognito's safe password policy message
+        }
+        return reject(new Error(message));
+      }
+      resolve({
+        username: result.user.getUsername(),
+        userConfirmed: result.userConfirmed
+      });
+    });
+  });
+}
+
+export function cognitoConfirmPassengerSignUp(email, verificationCode) {
+  return new Promise((resolve, reject) => {
+    const pool = getUserPool();
+    const cleanEmail = email.trim().toLowerCase();
+    const cognitoUser = new CognitoUser({ Username: cleanEmail, Pool: pool });
+
+    cognitoUser.confirmRegistration(verificationCode, true, (err, result) => {
+      if (err) {
+        let message = err.message || "Verification failed.";
+        if (err.code === "CodeMismatchException") {
+          message = "Invalid verification code provided.";
+        } else if (err.code === "ExpiredCodeException") {
+          message = "Verification code has expired. Please request a new one.";
+        } else if (err.code === "NotAuthorizedException") {
+          message = "Account is already confirmed or the request is invalid.";
+        }
+        return reject(new Error(message));
+      }
+      resolve(result);
+    });
+  });
+}
+
+export function cognitoResendPassengerCode(email) {
+  return new Promise((resolve, reject) => {
+    const pool = getUserPool();
+    const cleanEmail = email.trim().toLowerCase();
+    const cognitoUser = new CognitoUser({ Username: cleanEmail, Pool: pool });
+
+    cognitoUser.resendConfirmationCode((err, result) => {
+      if (err) {
+        let message = err.message || "Failed to resend confirmation code.";
+        if (err.code === "LimitExceededException") {
+          message = "Too many requests. Please wait before trying again.";
+        }
+        return reject(new Error(message));
+      }
+      resolve(result);
+    });
+  });
 }
