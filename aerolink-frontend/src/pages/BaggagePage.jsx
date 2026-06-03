@@ -1,3 +1,4 @@
+﻿import { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { 
   Luggage, Plus, Search, Filter, AlertCircle, CheckCircle2, 
@@ -110,7 +111,7 @@ export default function BaggagePage() {
     }
   };
 
-  // ── STAFF COMPUTATIONS ───────────────────────────────────────────────────────
+  // â”€â”€ STAFF COMPUTATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const filteredBags = useMemo(() => {
     if (!isStaff) return bags;
     return bags.filter(bag => {
@@ -133,7 +134,7 @@ export default function BaggagePage() {
     };
   }, [bags, isStaff]);
 
-  // ── PASSENGER TIMELINE HELPER ────────────────────────────────────────────────
+  // â”€â”€ PASSENGER TIMELINE HELPER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const getTimelineStepStatus = (stepIndex, currentStatus) => {
     if (currentStatus === "DELAYED") {
       // Find the last completed step if possible, but simplified: DELAYED freezes timeline visually
@@ -149,7 +150,7 @@ export default function BaggagePage() {
 
 
   if (!isStaff) {
-    // ── PASSENGER VIEW: Track Your Baggage ─────────────────────────────────────
+    // â”€â”€ PASSENGER VIEW: Track Your Baggage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     return (
       <div className="space-y-8 max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -289,7 +290,7 @@ export default function BaggagePage() {
     );
   }
 
-  // ── STAFF VIEW: Baggage Operations ───────────────────────────────────────────
+  // â”€â”€ STAFF VIEW: Baggage Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -462,7 +463,7 @@ export default function BaggagePage() {
                 </div>
                 <div className="col-span-2">
                   <span className="block text-xs font-semibold uppercase opacity-70">Route</span>
-                  <span>{selectedBookingDetails.origin} → {selectedBookingDetails.destination}</span>
+                  <span>{selectedBookingDetails.origin} â†’ {selectedBookingDetails.destination}</span>
                 </div>
               </div>
             </div>
@@ -536,7 +537,7 @@ export default function BaggagePage() {
                 onClick={() => navigate("/dashboard/bookings")}
                 className="text-sky-600 hover:text-sky-800 font-semibold text-xs"
               >
-                ← Select a different Passenger Booking
+                â† Select a different Passenger Booking
               </button>
             </div>
           )}
@@ -606,3 +607,4 @@ export default function BaggagePage() {
     </div>
   );
 }
+
