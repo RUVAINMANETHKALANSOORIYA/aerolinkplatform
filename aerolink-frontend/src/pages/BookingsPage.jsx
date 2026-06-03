@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Ticket, Plus } from "lucide-react";
-import { getBookings, createBooking } from "../services/api.js";
+import { getBookings, createBooking, createPayment } from "../services/api.js";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -19,6 +19,23 @@ export default function BookingsPage() {
   const [selectedFlight, setSelectedFlight] = useState(location.state?.selectedFlight || null);
   const [seatCount, setSeatCount] = useState("1");
   const [passengerName, setPassengerName] = useState(username);
+  
+  const [payingBooking, setPayingBooking] = useState(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  const handlePayment = async (result) => {
+    setPaymentProcessing(true);
+    setError("");
+    try {
+      await createPayment(payingBooking.id, result);
+      setPayingBooking(null);
+      loadBookings();
+    } catch (err) {
+      setError(err.message || "Payment simulation failed");
+    } finally {
+      setPaymentProcessing(false);
+    }
+  };
 
   const loadBookings = async () => {
     setLoading(true);
@@ -75,7 +92,31 @@ export default function BookingsPage() {
         </div>
       )}
 
-      {isPassenger && (
+      {isPassenger && payingBooking && (
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-6">
+          <h3 className="text-base font-semibold leading-6 text-slate-900 mb-4">Complete Payment</h3>
+          <div className="bg-slate-50 p-4 rounded-md border border-slate-200 mb-4">
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="font-semibold text-slate-900">{payingBooking.flight_no}</h4>
+              <span className="text-sm font-medium text-slate-700">${Number(payingBooking.total_amount || 0).toFixed(2)} Total</span>
+            </div>
+            <div className="text-sm text-slate-600 mb-1">{payingBooking.origin} → {payingBooking.destination}</div>
+            <div className="text-xs text-slate-500">{payingBooking.seat_count} seats booked</div>
+          </div>
+          <p className="text-sm text-amber-700 bg-amber-50 p-3 rounded-md border border-amber-200 mb-4">
+            Simulation only — no real payment details are collected.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => setPayingBooking(null)} disabled={paymentProcessing} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">Cancel</button>
+            <button onClick={() => handlePayment("FAILED")} disabled={paymentProcessing} className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 shadow-sm ring-1 ring-inset ring-red-200 hover:bg-red-100">Simulate Failed Payment</button>
+            <button onClick={() => handlePayment("SUCCESS")} disabled={paymentProcessing} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500">
+              {paymentProcessing ? <LoadingSpinner size="sm" label="" /> : "Simulate Successful Payment"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isPassenger && !payingBooking && (
         <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-6">
           <h3 className="text-base font-semibold leading-6 text-slate-900 mb-4">Make a Booking</h3>
           {!selectedFlight ? (
@@ -169,6 +210,7 @@ export default function BookingsPage() {
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Seats</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Total</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Status</th>
+                  {isPassenger && <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
@@ -185,11 +227,18 @@ export default function BookingsPage() {
                       {booking.seat_count || 1}
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-slate-900">
-                      {booking.total_amount ? `$${booking.total_amount.toFixed(2)}` : "-"}
+                      {booking.total_amount != null ? `$${Number(booking.total_amount || 0).toFixed(2)}` : "-"}
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm">
                       <StatusBadge status={booking.status} />
                     </td>
+                    {isPassenger && (
+                      <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                        {booking.status === "PENDING_PAYMENT" && (
+                          <button onClick={() => setPayingBooking(booking)} className="text-blue-600 hover:text-blue-900 font-semibold">Pay Now</button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

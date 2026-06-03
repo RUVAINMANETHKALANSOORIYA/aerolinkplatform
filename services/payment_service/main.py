@@ -7,7 +7,7 @@ from pathlib import Path
 
 import boto3
 import requests
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -99,8 +99,6 @@ def publish_payment_event(
 
 class PaymentCreate(BaseModel):
     booking_id: str | int
-    amount: float
-    payment_method: str
     payment_result: str
 
     class Config:
@@ -190,26 +188,67 @@ def metrics_endpoint():
 
 
 @app.post("/payments", response_model=PaymentOut, status_code=201)
-def create_payment(payment: PaymentCreate, db: Session = Depends(database.get_db)):
+def create_payment(payment: PaymentCreate, request: Request, db: Session = Depends(database.get_db)):
+    passenger_sub = request.headers.get("x-passenger-sub")
+    if not passenger_sub:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     payment_status = payment.payment_result.strip().upper()
-    if payment_status not in VALID_PAYMENT_RESULTS:
-        raise HTTPException(status_code=400, detail="payment_result must be SUCCESS, FAILED, or PENDING")
+    if payment_status not in {"SUCCESS", "FAILED"}:
+        raise HTTPException(status_code=400, detail="payment_result must be SUCCESS or FAILED")
+
+    # Fetch booking to validate ownership, status, and get total_amount
+    booking_resp = requests.get(f"{BOOKING_SERVICE_URL.rstrip('/')}/bookings/{payment.booking_id}", timeout=5)
+    if booking_resp.status_code != 200:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    booking = booking_resp.json()
+
+    booking_passenger_sub = booking.get("passenger_sub")
+    if not booking_passenger_sub or booking_passenger_sub != passenger_sub:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Booking does not belong to user"
+        )
+    
+    if booking.get("status") != "PENDING_PAYMENT":
+        raise HTTPException(status_code=400, detail="Booking is not in PENDING_PAYMENT status")
 
     transaction_reference = f"PAY-{uuid.uuid4().hex[:16].upper()}"
+    
+    stored_total = booking.get("total_amount")
+    if stored_total is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Booking does not contain a valid payable amount"
+        )
+    try:
+        amount = float(stored_total)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Booking does not contain a valid payable amount"
+        )
+    if amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Booking does not contain a valid payable amount"
+        )
+        
+    payment_method = "SIMULATED_CARD"
 
     if database.use_dynamodb():
         new_payment = database.create_payment_item(
             booking_id=payment.booking_id,
-            amount=payment.amount,
-            payment_method=payment.payment_method.strip(),
+            amount=amount,
+            payment_method=payment_method,
             payment_status=payment_status,
             transaction_reference=transaction_reference,
         )
     else:
         new_payment = models.Payment(
             booking_id=int(payment.booking_id),
-            amount=payment.amount,
-            payment_method=payment.payment_method.strip(),
+            amount=amount,
+            payment_method=payment_method,
             payment_status=payment_status,
             transaction_reference=transaction_reference,
             created_at=datetime.utcnow(),

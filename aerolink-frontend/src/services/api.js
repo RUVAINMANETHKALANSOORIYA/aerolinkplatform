@@ -90,4 +90,16 @@ export const updateBaggageStatus = (baggageId, status) =>
     method: "PATCH"
   });
 
+// ── Payments ──────────────────────────────────────────────────────────────────
+
+export const createPayment = (bookingId, result) =>
+  requestJson("/api/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      booking_id: bookingId,
+      payment_result: result
+    })
+  });
+
 // NOTE: /api/notifications is not yet deployed. Do not call it from the frontend.
+

@@ -304,10 +304,8 @@ async def booking_proxy(request: Request, path: str = ""):
     if request.method == "GET":
         if path == "me":
             require_groups(user, [PASSENGER_GROUP])
-        elif path == "":
-            require_groups(user, [STAFF_GROUP])
         else:
-            require_groups(user, [PASSENGER_GROUP, STAFF_GROUP])
+            require_groups(user, [STAFF_GROUP])
     elif request.method == "POST":
         require_groups(user, [PASSENGER_GROUP])
     elif request.method in ["PATCH", "DELETE"]:
@@ -355,15 +353,14 @@ async def schedule_proxy(request: Request, path: str = ""):
 async def payment_proxy(request: Request, path: str = ""):
     user = await verify_user(request)
 
+    extra_headers = {}
+    if user and user.get("sub"):
+        extra_headers["x-passenger-sub"] = user.get("sub")
+
     if request.method == "POST":
         require_groups(user, [PASSENGER_GROUP])
-    elif request.method == "GET":
-        if path == "":
-            require_groups(user, [STAFF_GROUP])
-        else:
-            require_groups(user, [PASSENGER_GROUP, STAFF_GROUP])
     else:
         require_groups(user, [STAFF_GROUP])
 
     target_path = "/payments" + (f"/{path}" if path else "")
-    return await proxy_request(request, PAYMENT_SERVICE_URL, target_path)
+    return await proxy_request(request, PAYMENT_SERVICE_URL, target_path, extra_headers=extra_headers)
