@@ -50,7 +50,7 @@ export default function FlightsPage() {
   }, []);
 
   const handleBookFlight = (flight) => {
-    navigate("/bookings", { state: { selectedFlight: flight } });
+    navigate("/dashboard/bookings", { state: { selectedFlight: flight } });
   };
 
   const handleCreateFlight = async (e) => {
