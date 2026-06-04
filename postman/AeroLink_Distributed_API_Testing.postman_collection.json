@@ -1,0 +1,1285 @@
+{
+    "info": {
+        "name": "AeroLink Distributed API Testing",
+        "description": "COMP60010 Assignment 2 - API Testing for AeroLink Cloud Platform",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "const runId = pm.environment.get('testRunId') || Date.now().toString();",
+                    "pm.environment.set('testRunId', runId);",
+                    "pm.environment.set('testFlightNo', 'AL-PM-' + runId.slice(-6));",
+                    "pm.environment.set('testBaggageTag', 'TAG-PM-' + runId.slice(-6));"
+                ]
+            }
+        }
+    ],
+    "item": [
+        {
+            "name": "00 - Pre-Run Validation",
+            "item": [
+                {
+                    "name": "Request 00.1: Health Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/health",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Status is 200 OK', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "01 - Authentication and RBAC",
+            "item": [
+                {
+                    "name": "Request API-01: Protected Route Without Token",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 401', function () {",
+                                    "    pm.response.to.have.status(401);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-02: Passenger Can View Flights",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Response is valid JSON', function () {",
+                                    "    pm.response.to.be.json;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-03: Passenger Cannot Create Flight",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights?flight_no={{testFlightNo}}&origin=LHR&destination=JFK&price=125.50&seats=40",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ],
+                            "query": [
+                                {
+                                    "key": "flight_no",
+                                    "value": "{{testFlightNo}}"
+                                },
+                                {
+                                    "key": "origin",
+                                    "value": "LHR"
+                                },
+                                {
+                                    "key": "destination",
+                                    "value": "JFK"
+                                },
+                                {
+                                    "key": "price",
+                                    "value": "125.50"
+                                },
+                                {
+                                    "key": "seats",
+                                    "value": "40"
+                                }
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 403', function () {",
+                                    "    pm.response.to.have.status(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "02 - Flight Management",
+            "item": [
+                {
+                    "name": "Request API-04: Staff Creates Test Flight",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{staffToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights?flight_no={{testFlightNo}}&origin=LHR&destination=JFK&price=125.50&seats=40",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ],
+                            "query": [
+                                {
+                                    "key": "flight_no",
+                                    "value": "{{testFlightNo}}"
+                                },
+                                {
+                                    "key": "origin",
+                                    "value": "LHR"
+                                },
+                                {
+                                    "key": "destination",
+                                    "value": "JFK"
+                                },
+                                {
+                                    "key": "price",
+                                    "value": "125.50"
+                                },
+                                {
+                                    "key": "seats",
+                                    "value": "40"
+                                }
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Staff creates a flight successfully', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});",
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    pm.environment.set('flightId', response.flight_id || response.id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-05: Passenger Views Newly Created Flight",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Response includes newly created flight', function () {",
+                                    "    const flightNo = pm.environment.get('testFlightNo');",
+                                    "    const responseText = pm.response.text();",
+                                    "    pm.expect(responseText).to.include(flightNo);",
+                                    "});",
+                                    "const fId = pm.environment.get('flightId');",
+                                    "const body = pm.response.json();",
+                                    "const flights = body.items || body;",
+                                    "const flight = flights.find(f => (f.id == fId || f.flight_id == fId || f.flight_no === pm.environment.get('testFlightNo')));",
+                                    "if (flight) {",
+                                    "    pm.test('Flight available_seats is 40 initially', function () {",
+                                    "        if (flight.available_seats !== undefined) {",
+                                    "            pm.expect(Number(flight.available_seats)).to.eql(40);",
+                                    "        }",
+                                    "    });",
+                                    "    pm.environment.set('initialAvailableSeats', flight.available_seats);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "03 - Successful Booking and Payment Flow",
+            "item": [
+                {
+                    "name": "Request API-06: Passenger Creates Booking for Success Flow",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings?name=Postman Test Passenger&flight_id={{flightId}}&seat_count=2",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings"
+                            ],
+                            "query": [
+                                {
+                                    "key": "name",
+                                    "value": "Postman Test Passenger"
+                                },
+                                {
+                                    "key": "flight_id",
+                                    "value": "{{flightId}}"
+                                },
+                                {
+                                    "key": "seat_count",
+                                    "value": "2"
+                                }
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected successful status', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});",
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.test('Response status field is PENDING_PAYMENT', function () {",
+                                    "        pm.expect(res.status).to.eql('PENDING_PAYMENT');",
+                                    "    });",
+                                    "    pm.test('Response seat_count equals 2', function () {",
+                                    "        pm.expect(Number(res.seat_count)).to.eql(2);",
+                                    "    });",
+                                    "    pm.test('Response total_amount equals 251', function () {",
+                                    "        pm.expect(Number(res.total_amount)).to.eql(251);",
+                                    "    });",
+                                    "    pm.environment.set('bookingIdSuccess', res.id || res.booking_id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-06B: Verify Seat Availability Reduced After Booking",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const fId = pm.environment.get('flightId');",
+                                    "const initialAvailableSeats = pm.environment.get('initialAvailableSeats');",
+                                    "const body = pm.response.json();",
+                                    "const flights = body.items || body;",
+                                    "const flight = flights.find(f => (f.id == fId || f.flight_id == fId || f.flight_no === pm.environment.get('testFlightNo')));",
+                                    "if (flight && initialAvailableSeats !== undefined) {",
+                                    "    pm.test('Seat Availability Reduced by 2', function () {",
+                                    "        pm.expect(Number(flight.available_seats)).to.eql(Number(initialAvailableSeats) - 2);",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-07: Passenger Views Own Booking",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings",
+                                "me"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Response includes bookingIdSuccess and is PENDING_PAYMENT', function () {",
+                                    "    const bId = pm.environment.get('bookingIdSuccess');",
+                                    "    const body = pm.response.json();",
+                                    "    const items = body.items || body;",
+                                    "    const booking = items.find(b => (b.id == bId || b.booking_id == bId));",
+                                    "    pm.expect(booking).to.not.be.undefined;",
+                                    "    pm.expect(booking.status).to.eql('PENDING_PAYMENT');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-08: Passenger Cannot View All Passenger Bookings",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 403', function () {",
+                                    "    pm.response.to.have.status(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-09: Passenger Submits Simulated Successful Payment",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"booking_id\": \"{{bookingIdSuccess}}\",\n  \"payment_result\": \"SUCCESS\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/payments",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "payments"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected successful status', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});",
+                                    "pm.test('Response indicates success and has no card data', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.payment_status).to.eql('SUCCESS');",
+                                    "    pm.expect(res.card_number).to.be.undefined;",
+                                    "    pm.expect(res.cvv).to.be.undefined;",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-10: Confirm Booking Status After Success",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings",
+                                "me"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Matching booking status is CONFIRMED', function () {",
+                                    "    const bId = pm.environment.get('bookingIdSuccess');",
+                                    "    const body = pm.response.json();",
+                                    "    const items = body.items || body;",
+                                    "    const booking = items.find(b => (b.id == bId || b.booking_id == bId));",
+                                    "    pm.expect(booking).to.not.be.undefined;",
+                                    "    pm.expect(booking.status).to.eql('CONFIRMED');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "04 - Failed Payment Flow",
+            "item": [
+                {
+                    "name": "Request API-11: Passenger Creates Second Booking for Failure Flow",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings?name=Postman Test Passenger&flight_id={{flightId}}&seat_count=1",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings"
+                            ],
+                            "query": [
+                                {
+                                    "key": "name",
+                                    "value": "Postman Test Passenger"
+                                },
+                                {
+                                    "key": "flight_id",
+                                    "value": "{{flightId}}"
+                                },
+                                {
+                                    "key": "seat_count",
+                                    "value": "1"
+                                }
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Successful response', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});",
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.test('Status is PENDING_PAYMENT', function () {",
+                                    "        pm.expect(res.status).to.eql('PENDING_PAYMENT');",
+                                    "    });",
+                                    "    pm.environment.set('bookingIdFailed', res.id || res.booking_id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-12: Passenger Submits Simulated Failed Payment",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"booking_id\": \"{{bookingIdFailed}}\",\n  \"payment_result\": \"FAILED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/payments",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "payments"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Successful API handling response', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});",
+                                    "pm.test('Failure outcome is represented safely', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.payment_status).to.eql('FAILED');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-13: Confirm Failed Booking Status",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings",
+                                "me"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Matching booking status is PAYMENT_FAILED', function () {",
+                                    "    const bId = pm.environment.get('bookingIdFailed');",
+                                    "    const body = pm.response.json();",
+                                    "    const items = body.items || body;",
+                                    "    const booking = items.find(b => (b.id == bId || b.booking_id == bId));",
+                                    "    pm.expect(booking).to.not.be.undefined;",
+                                    "    pm.expect(booking.status).to.eql('PAYMENT_FAILED');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "05 - Staff Booking and Baggage Operations",
+            "item": [
+                {
+                    "name": "Request API-14: Staff Views All Passenger Bookings",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{staffToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/bookings",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "bookings"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Contains bookingIdSuccess', function () {",
+                                    "    const bId = pm.environment.get('bookingIdSuccess');",
+                                    "    const responseText = pm.response.text();",
+                                    "    pm.expect(responseText).to.include(bId);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-15: Passenger Cannot Register Baggage",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"booking_id\": \"{{bookingIdSuccess}}\",\n  \"tag_number\": \"{{testBaggageTag}}-DENIED\",\n  \"weight_kg\": 18.5\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/baggage",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "baggage"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 403', function () {",
+                                    "    pm.response.to.have.status(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-16: Staff Registers Baggage for Confirmed Booking",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{staffToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"booking_id\": \"{{bookingIdSuccess}}\",\n  \"tag_number\": \"{{testBaggageTag}}\",\n  \"weight_kg\": 18.5\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/baggage",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "baggage"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected successful create status', function () {",
+                                    "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                                    "});",
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.test('Status starts at CHECKED_IN', function () {",
+                                    "        pm.expect(res.status).to.eql('CHECKED_IN');",
+                                    "    });",
+                                    "    pm.test('Does not expose passenger_sub', function () {",
+                                    "        pm.expect(res.passenger_sub).to.be.undefined;",
+                                    "    });",
+                                    "    pm.environment.set('baggageId', res.id || res.baggage_id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-17: Staff Updates Baggage Status",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{staffToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"LOADED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/baggage/{{baggageId}}/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "baggage",
+                                "{{baggageId}}",
+                                "status"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Response status is LOADED', function () {",
+                                    "    const res = pm.response.json();",
+                                    "    pm.expect(res.status || res.baggage?.status).to.eql('LOADED');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "06 - Passenger Notification and Baggage Tracking",
+            "item": [
+                {
+                    "name": "Request API-18: Passenger Views Own Notifications",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/notifications/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "notifications",
+                                "me"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const body = pm.response.json();",
+                                    "const items = body.items || body;",
+                                    "const hasSuccessEvent = items.some(n => n.event_type === 'PaymentSucceeded' || (n.title && n.title.includes('Payment confirmed')));",
+                                    "if (!hasSuccessEvent) {",
+                                    "    pm.expect.fail('Payment notification not visible yet. Wait several seconds and rerun only this request.');",
+                                    "} else {",
+                                    "    pm.test('Response includes a payment-success notification', function () {",
+                                    "        pm.expect(hasSuccessEvent).to.be.true;",
+                                    "    });",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-19: Passenger Views Own Baggage",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/baggage/me",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "baggage",
+                                "me"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Response includes baggageId or tag', function () {",
+                                    "    const tag = pm.environment.get('testBaggageTag');",
+                                    "    pm.expect(pm.response.text()).to.include(tag);",
+                                    "});",
+                                    "pm.test('Does not expose passenger_sub', function () {",
+                                    "    pm.expect(pm.response.text()).to.not.include('passenger_sub');",
+                                    "});",
+                                    "pm.test('Response shows updated status LOADED', function () {",
+                                    "    const body = pm.response.json();",
+                                    "    const items = body.items || body;",
+                                    "    const tag = pm.environment.get('testBaggageTag');",
+                                    "    const bag = items.find(b => b.tag_number === tag);",
+                                    "    pm.expect(bag).to.not.be.undefined;",
+                                    "    pm.expect(bag.status).to.eql('LOADED');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-20: Passenger Cannot Update Baggage Status",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"COLLECTED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/baggage/{{baggageId}}/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "baggage",
+                                "{{baggageId}}",
+                                "status"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 403', function () {",
+                                    "    pm.response.to.have.status(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "07 - Optional Pricing or Schedule Synchronisation",
+            "item": [
+                {
+                    "name": "Request API-21: Staff Updates Flight Price",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{staffToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PATCH",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights/{{flightId}}/price?new_price=130.75",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights",
+                                "{{flightId}}",
+                                "price"
+                            ],
+                            "query": [
+                                {
+                                    "key": "new_price",
+                                    "value": "130.75"
+                                }
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Request API-22: Passenger Verifies Flight Price Change",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{passengerToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/flights",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "flights"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('Expected status 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('New price is reflected', function () {",
+                                    "    const fId = pm.environment.get('flightId');",
+                                    "    const body = pm.response.json();",
+                                    "    const flights = body.items || body;",
+                                    "    const flight = flights.find(f => (f.id == fId || f.flight_id == fId));",
+                                    "    pm.expect(flight).to.not.be.undefined;",
+                                    "    pm.expect(Number(flight.price)).to.eql(130.75);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
