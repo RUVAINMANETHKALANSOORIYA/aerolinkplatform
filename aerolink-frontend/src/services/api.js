@@ -72,6 +72,16 @@ export const createFlight = (flight_no, origin, destination, price, seats) =>
     method: "POST"
   });
 
+export const updateFlightPrice = (flight_id, newPrice) =>
+  requestJson(`/api/flights/${encodeURIComponent(flight_id)}/price?new_price=${encodeURIComponent(newPrice)}`, {
+    method: "PATCH"
+  });
+
+export const updateFlightRoute = (flight_id, origin, destination) =>
+  requestJson(`/api/flights/${encodeURIComponent(flight_id)}/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`, {
+    method: "PATCH"
+  });
+
 // ── Bookings ──────────────────────────────────────────────────────────────────
 
 export const getBookings = (isPassenger = true) => requestJson(isPassenger ? "/api/bookings/me" : "/api/bookings");

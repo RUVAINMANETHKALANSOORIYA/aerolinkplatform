@@ -139,3 +139,24 @@ def update_price_item(flight_id: str, new_price: float) -> Optional[dict[str, An
         if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
             return None
         raise
+
+
+def update_route_item(flight_id: str, new_origin: str, new_destination: str) -> Optional[dict[str, Any]]:
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        response = flight_table().update_item(
+            Key={"flight_id": str(flight_id)},
+            UpdateExpression="SET origin = :origin, destination = :destination, updated_at = :updated_at",
+            ExpressionAttributeValues={
+                ":origin": new_origin.strip().upper(),
+                ":destination": new_destination.strip().upper(),
+                ":updated_at": now
+            },
+            ConditionExpression="attribute_exists(flight_id)",
+            ReturnValues="ALL_NEW"
+        )
+        return _normalize_item(response.get("Attributes"))
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return None
+        raise

@@ -199,3 +199,34 @@ def update_price(flight_id: str, new_price: float, db: Session = Depends(databas
     # Task 4: Real-time sync event
     send_event("PRICE_UPDATED", {"flight_id": flight_id, "new_price": new_price})
     return {"message": "Price updated and broadcasted"}
+
+@app.patch("/flights/{flight_id}/route")
+def update_route(flight_id: str, origin: str, destination: str, db: Session = Depends(database.get_db)):
+    if not origin.strip() or not destination.strip():
+        raise HTTPException(status_code=400, detail="Origin and destination cannot be empty")
+        
+    origin = origin.strip().upper()
+    destination = destination.strip().upper()
+    
+    if len(origin) != 3 or not origin.isalpha() or len(destination) != 3 or not destination.isalpha():
+        raise HTTPException(status_code=400, detail="Origin and destination must be exactly 3 alphabetical characters")
+    if origin == destination:
+        raise HTTPException(status_code=400, detail="Origin and destination cannot be the same")
+        
+    if database.use_dynamodb():
+        flight = database.update_route_item(flight_id, origin, destination)
+        if not flight:
+            raise HTTPException(status_code=404, detail="Flight not found")
+    else:
+        try:
+            sqlite_flight_id = int(flight_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        flight = db.query(models.Flight).filter(models.Flight.id == sqlite_flight_id).first()
+        if not flight:
+            raise HTTPException(status_code=404, detail="Flight not found")
+        flight.origin = origin
+        flight.destination = destination
+        db.commit()
+    send_event("ROUTE_UPDATED", {"flight_id": flight_id, "origin": origin, "destination": destination})
+    return {"message": "Route updated and broadcasted"}

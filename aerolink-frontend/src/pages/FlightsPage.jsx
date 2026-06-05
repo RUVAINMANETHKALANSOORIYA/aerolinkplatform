@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plane, Plus, Search, Filter, AlertCircle, CheckCircle2, Ticket, Users, AlertTriangle, RefreshCw } from "lucide-react";
-import { getFlights, createFlight } from "../services/api.js";
+import { Plane, Plus, Search, Filter, AlertCircle, CheckCircle2, Ticket, Users, AlertTriangle, RefreshCw, Edit } from "lucide-react";
+import { getFlights, createFlight, updateFlightPrice, updateFlightRoute } from "../services/api.js";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Modal from "../components/Modal.jsx";
@@ -35,6 +35,13 @@ export default function FlightsPage() {
   const [newDestination, setNewDestination] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [newSeats, setNewSeats] = useState("");
+  
+  // Edit Modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingFlight, setEditingFlight] = useState(null);
+  const [editOrigin, setEditOrigin] = useState("");
+  const [editDestination, setEditDestination] = useState("");
+  const [editPrice, setEditPrice] = useState("");
 
   // Filter/Sort states
   const [searchTerm, setSearchTerm] = useState("");
@@ -101,6 +108,52 @@ export default function FlightsPage() {
       loadFlights();
     } catch (err) {
       setError(err.message || "Failed to create flight");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleEditFlight = (flight) => {
+    setEditingFlight(flight);
+    setEditOrigin(flight.origin || "");
+    setEditDestination(flight.destination || "");
+    setEditPrice(flight.price || "");
+    setIsEditModalOpen(true);
+    setError("");
+    setSuccessMsg("");
+  };
+
+  const handleUpdateFlight = async (e) => {
+    e.preventDefault();
+    if (!editOrigin || !editDestination || !editPrice) return;
+    setCreating(true);
+    setError("");
+    setSuccessMsg("");
+    try {
+      let routeUpdated = false;
+      let priceUpdated = false;
+
+      // Update route if changed
+      if (editOrigin !== editingFlight.origin || editDestination !== editingFlight.destination) {
+        await updateFlightRoute(editingFlight.flight_id, editOrigin, editDestination);
+        routeUpdated = true;
+      }
+
+      // Update price if changed
+      if (parseFloat(editPrice) !== editingFlight.price) {
+        await updateFlightPrice(editingFlight.flight_id, parseFloat(editPrice));
+        priceUpdated = true;
+      }
+
+      if (routeUpdated || priceUpdated) {
+        setSuccessMsg("Flight details updated successfully.");
+        loadFlights();
+      } else {
+        setSuccessMsg("No changes made.");
+      }
+      setIsEditModalOpen(false);
+    } catch (err) {
+      setError(err.message || "Failed to update flight");
     } finally {
       setCreating(false);
     }
@@ -275,7 +328,7 @@ export default function FlightsPage() {
                   {isStaff && <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Total Seats</th>}
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Available</th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Availability</th>
-                  {isPassenger && <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>}
+                  <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
@@ -303,8 +356,8 @@ export default function FlightsPage() {
                     <td className="whitespace-nowrap px-3 py-4 text-sm">
                       <AvailabilityBadge status={flight.availability_status} />
                     </td>
-                    {isPassenger && (
-                      <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                    <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                      {isPassenger && (
                         <button
                           onClick={() => handleBookFlight(flight)}
                           disabled={flight.available_seats === 0}
@@ -312,8 +365,17 @@ export default function FlightsPage() {
                         >
                           Book<span className="sr-only">, {flight.flight_no}</span>
                         </button>
-                      </td>
-                    )}
+                      )}
+                      {isStaff && (
+                        <button
+                          onClick={() => handleEditFlight(flight)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                        >
+                          <Edit className="h-4 w-4" />
+                          Manage
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -417,6 +479,87 @@ export default function FlightsPage() {
                 className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 disabled:opacity-70"
               >
                 {creating ? <LoadingSpinner size="sm" label="" /> : "Create Flight"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Edit Flight Modal (Staff Only) */}
+      {isStaff && editingFlight && (
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={() => !creating && setIsEditModalOpen(false)}
+          title="Update Flight Details"
+        >
+          <div className="mb-5 text-sm text-slate-500">
+            Modify fare and routing details for {editingFlight.flight_no}.
+          </div>
+          <form onSubmit={handleUpdateFlight} className="space-y-4">
+            <div>
+              <label htmlFor="editFlightNo" className="block text-sm font-medium leading-6 text-slate-900">Flight Number</label>
+              <input
+                type="text"
+                id="editFlightNo"
+                disabled
+                value={editingFlight.flight_no}
+                className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-500 shadow-sm ring-1 ring-inset ring-slate-200 bg-slate-50 sm:text-sm sm:leading-6 font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="editOrigin" className="block text-sm font-medium leading-6 text-slate-900">Origin</label>
+                <input
+                  type="text"
+                  id="editOrigin"
+                  required
+                  maxLength={3}
+                  value={editOrigin}
+                  onChange={(e) => setEditOrigin(e.target.value)}
+                  className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6 uppercase"
+                />
+              </div>
+              <div>
+                <label htmlFor="editDestination" className="block text-sm font-medium leading-6 text-slate-900">Destination</label>
+                <input
+                  type="text"
+                  id="editDestination"
+                  required
+                  maxLength={3}
+                  value={editDestination}
+                  onChange={(e) => setEditDestination(e.target.value)}
+                  className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6 uppercase"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="editPrice" className="block text-sm font-medium leading-6 text-slate-900">Price</label>
+              <input
+                type="number"
+                id="editPrice"
+                required
+                min="1"
+                step="0.01"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-sky-600 sm:text-sm sm:leading-6"
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                disabled={creating}
+                className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creating || !editOrigin || !editDestination || !editPrice}
+                className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 disabled:opacity-70"
+              >
+                {creating ? <LoadingSpinner size="sm" label="" /> : "Save Changes"}
               </button>
             </div>
           </form>
