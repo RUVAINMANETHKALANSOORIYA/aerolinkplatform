@@ -1,0 +1,4 @@
+*.csv
+*.html
+!/.gitkeep
+!stress/.gitkeep
